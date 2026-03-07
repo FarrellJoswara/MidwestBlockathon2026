@@ -7,6 +7,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/modules/api";
 import { executorApiPaths } from "@/lib/modules/executor";
 import type { Will } from "@/lib/modules/types";
+import { useEffect } from "react";
+import { useDeclareDeath } from "@/lib/modules/contract-generator/useDeclareDeath";
 
 interface ExecutorDashboardProps {
   will: Will;
@@ -18,17 +20,30 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
   const [declareConfirm, setDeclareConfirm] = useState(false);
   const [distributeConfirm, setDistributeConfirm] = useState(false);
 
-  const declareDeath = useMutation({
-    mutationFn: () =>
+  const {
+    declareDeath: declareDeathOnChain,
+    hash: declareDeathHash,
+    isWritePending,
+    isConfirming,
+    isSuccess,
+    error: declareDeathError,
+  } = useDeclareDeath();
+
+  const declareDeathSync = useMutation({
+    mutationFn: (txHash: string) =>
       apiFetch(executorApiPaths.declareDeath(will.id), {
         method: "POST",
         wallet: address ?? undefined,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ txHash }),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["will", will.id, address] });
-      setDeclareConfirm(false);
-    },
-  });
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["will", will.id, address] });
+        setDeclareConfirm(false);
+      },
+    });
 
   const distribute = useMutation({
     mutationFn: () =>
@@ -41,6 +56,13 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
       setDistributeConfirm(false);
     },
   });
+
+  useEffect(() => {
+    if (isSuccess && declareDeathHash && !declareDeathSync.isPending) {
+      declareDeathSync.mutate(declareDeathHash);
+    }
+  }, [isSuccess, declareDeathHash, declareDeathSync]);
+
 
   const downloadDoc = () => {
     if (!will.ipfs_cid || !will.encrypted_doc_key_iv || !address) return;
@@ -144,31 +166,40 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
           </p>
           {!declareConfirm ? (
             <button
+            type="button"
+            onClick={() => setDeclareConfirm(true)}
+            className="mt-4 rounded-lg border border-seal bg-white px-4 py-2 text-seal hover:bg-seal/10"
+          >
+            I confirm: Declare death
+          </button>
+        ) : (
+          <div className="mt-4 flex gap-2">
+            <button
               type="button"
-              onClick={() => setDeclareConfirm(true)}
-              className="mt-4 rounded-lg border border-seal bg-white px-4 py-2 text-seal hover:bg-seal/10"
+              onClick={() => declareDeathOnChain(BigInt(will.id))}
+              disabled={isWritePending || isConfirming || declareDeathSync.isPending}
+              className="rounded-lg bg-seal px-4 py-2 text-white hover:bg-seal/90 disabled:opacity-50"
             >
-              I confirm: Declare death
+              {isWritePending
+                ? "Confirm in Wallet…"
+                : isConfirming
+                  ? "Waiting for Confirmation…"
+                  : declareDeathSync.isPending
+                    ? "Syncing…"
+                    : "Confirm"}
             </button>
-          ) : (
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => declareDeath.mutate()}
-                disabled={declareDeath.isPending}
-                className="rounded-lg bg-seal px-4 py-2 text-white hover:bg-seal/90 disabled:opacity-50"
-              >
-                {declareDeath.isPending ? "Processing…" : "Confirm"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeclareConfirm(false)}
-                className="rounded-lg border border-ink-300 px-4 py-2 hover:bg-ink-100"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setDeclareConfirm(false)}
+              className="rounded-lg border border-ink-300 px-4 py-2 hover:bg-ink-100"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {declareDeathError && (
+          <p className="mt-3 text-sm text-red-600">{declareDeathError.message}</p>
+        )}
         </section>
       )}
 
