@@ -1,0 +1,208 @@
+"use client";
+
+import { useState } from "react";
+import { useAccount } from "wagmi";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { apiFetch } from "@/lib/api";
+
+export default function CreateWillPage() {
+  const { address, isConnected } = useAccount();
+  const router = useRouter();
+  const [creatorWallet, setCreatorWallet] = useState("");
+  const [beneficiaries, setBeneficiaries] = useState<string[]>(["", ""]);
+  const [percentages, setPercentages] = useState<number[]>([50, 50]);
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const totalPct = percentages.reduce((s, p) => s + p, 0);
+  const valid = creatorWallet.match(/^0x[a-fA-F0-9]{40}$/) && Math.abs(totalPct - 100) < 0.01;
+
+  const addBeneficiary = () => {
+    setBeneficiaries((b) => [...b, ""]);
+    setPercentages((p) => [...p, 0]);
+  };
+
+  const updateBeneficiary = (i: number, value: string) => {
+    setBeneficiaries((b) => [...b.slice(0, i), value, ...b.slice(i + 1)]);
+  };
+
+  const updatePercentage = (i: number, value: number) => {
+    setPercentages((p) => [...p.slice(0, i), value, ...p.slice(i + 1)]);
+  };
+
+  const removeBeneficiary = (i: number) => {
+    if (beneficiaries.length <= 1) return;
+    setBeneficiaries((b) => b.filter((_, j) => j !== i));
+    setPercentages((p) => p.filter((_, j) => j !== i));
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!address || !valid) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const wallets = beneficiaries.filter((w) => w.trim().length > 0);
+      const pcts = percentages.slice(0, wallets.length);
+      if (wallets.length === 0 || pcts.reduce((s, x) => s + x, 0) !== 100) {
+        setError("Beneficiaries and percentages must sum to 100.");
+        setLoading(false);
+        return;
+      }
+      const will = await apiFetch("/api/wills/create", {
+        method: "POST",
+        wallet: address,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creator_wallet: creatorWallet.trim(),
+          beneficiary_wallets: wallets.map((w) => w.trim()),
+          beneficiary_percentages: pcts,
+        }),
+      });
+      if (file && will.id) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("will_id", will.id);
+        const uploadRes = await fetch("/api/ipfs/upload", {
+          method: "POST",
+          headers: { "x-wallet-address": address },
+          body: form,
+        });
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({}));
+          setError("Will created but document upload failed: " + (err.error || uploadRes.statusText));
+          setLoading(false);
+          router.push(`/wills/${will.id}`);
+          return;
+        }
+        const { cid, iv } = await uploadRes.json();
+        await apiFetch(`/api/wills/${will.id}/update`, {
+          method: "PATCH",
+          wallet: address,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ipfs_cid: cid, encrypted_doc_key_iv: iv }),
+        });
+      }
+      router.push(`/wills/${will.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create will");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isConnected || !address) {
+    return (
+      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
+        <p className="text-ink-600">Connect your wallet to create a will.</p>
+        <Link href="/" className="mt-4 inline-block text-seal hover:underline">
+          ← Back home
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-parchment">
+      <header className="border-b border-ink-200 bg-parchment/95">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+          <Link href="/wills" className="font-semibold text-ink-900">
+            ← Wills
+          </Link>
+        </div>
+      </header>
+      <main className="mx-auto max-w-xl px-4 py-10">
+        <h1 className="text-2xl font-bold text-ink-900">Create Will</h1>
+        <p className="mt-1 text-ink-600">
+          You are creating this will as <strong>executor</strong>. Enter the will
+          creator wallet and beneficiaries.
+        </p>
+        <form onSubmit={submit} className="mt-8 space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-ink-700">
+              Will creator wallet address
+            </label>
+            <input
+              type="text"
+              value={creatorWallet}
+              onChange={(e) => setCreatorWallet(e.target.value)}
+              placeholder="0x..."
+              className="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink-700">
+              Will document (PDF, optional)
+            </label>
+            <input
+              type="file"
+              accept=".pdf"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="mt-1 w-full text-sm text-ink-600"
+            />
+          </div>
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-ink-700">
+                Beneficiaries & allocation (%)
+              </label>
+              <button
+                type="button"
+                onClick={addBeneficiary}
+                className="text-sm text-seal hover:underline"
+              >
+                + Add
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-ink-500">Total must equal 100%</p>
+            <div className="mt-3 space-y-3">
+              {beneficiaries.map((w, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={w}
+                    onChange={(e) => updateBeneficiary(i, e.target.value)}
+                    placeholder="0x..."
+                    className="flex-1 rounded border border-ink-300 bg-white px-3 py-2 font-mono text-sm"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={percentages[i] ?? 0}
+                    onChange={(e) => updatePercentage(i, Number(e.target.value))}
+                    className="w-20 rounded border border-ink-300 bg-white px-2 py-2 text-sm"
+                  />
+                  <span className="flex items-center text-ink-500">%</span>
+                  <button
+                    type="button"
+                    onClick={() => removeBeneficiary(i)}
+                    className="text-ink-400 hover:text-red-600"
+                    aria-label="Remove"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            {Math.abs(totalPct - 100) > 0.01 && (
+              <p className="mt-1 text-sm text-amber-700">Total: {totalPct}% (must be 100%)</p>
+            )}
+          </div>
+          {error && (
+            <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>
+          )}
+          <button
+            type="submit"
+            disabled={!valid || loading}
+            className="w-full rounded-lg bg-ink-900 py-3 text-white disabled:opacity-50 hover:bg-ink-800"
+          >
+            {loading ? "Creating…" : "Create Will"}
+          </button>
+        </form>
+      </main>
+    </div>
+  );
+}
