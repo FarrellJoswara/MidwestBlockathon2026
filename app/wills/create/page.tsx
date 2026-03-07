@@ -1,14 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch } from "@/lib/modules/api";
 import { validateWillFormParams } from "@/lib/modules/ui";
+import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import { type Address } from "viem";
+
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
 export default function CreateWillPage() {
   const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
   const router = useRouter();
   const [creatorWallet, setCreatorWallet] = useState("");
   const [beneficiaries, setBeneficiaries] = useState<string[]>(["", ""]);
@@ -62,20 +66,17 @@ export default function CreateWillPage() {
     setLoading(true);
     setError(null);
     try {
-      const will = await apiFetch("/api/wills/create", {
-        method: "POST",
-        wallet: address,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          creator_wallet: creatorWallet.trim(),
-          beneficiary_wallets: wallets.map((w) => w.trim()),
-          beneficiary_percentages: pcts,
-        }),
-      });
-      if (file && will.id) {
+      if (!CONTRACT_ADDRESS) {
+        console.warn("Contract address is not defined in environment variables. We will just test the IPFS upload for now.");
+      }
+      
+      let cidStr = "";
+      let ivStr = "";
+
+      if (file) {
         const form = new FormData();
         form.append("file", file);
-        form.append("will_id", will.id);
+        form.append("will_id", "pending");
         const uploadRes = await fetch("/api/ipfs/upload", {
           method: "POST",
           headers: { "x-wallet-address": address },
@@ -83,20 +84,34 @@ export default function CreateWillPage() {
         });
         if (!uploadRes.ok) {
           const err = await uploadRes.json().catch(() => ({}));
-          setError("Will created but document upload failed: " + (err.error || uploadRes.statusText));
-          setLoading(false);
-          router.push(`/wills/${will.id}`);
-          return;
+          throw new Error("Document upload failed: " + (err.error || uploadRes.statusText));
         }
         const { cid, iv } = await uploadRes.json();
-        await apiFetch(`/api/wills/${will.id}/update`, {
-          method: "PATCH",
-          wallet: address,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ipfs_cid: cid, encrypted_doc_key_iv: iv }),
-        });
+        console.log("Success! File uploaded and encrypted to IPFS:");
+        console.log("CID:", cid);
+        console.log("IV:", iv);
+        cidStr = cid;
+        ivStr = iv;
       }
-      router.push(`/wills/${will.id}`);
+
+      if (CONTRACT_ADDRESS) {
+        const txHash = await writeContractAsync({
+          address: CONTRACT_ADDRESS,
+          abi: willRegistryAbi,
+          functionName: "createWill",
+          args: [
+            creatorWallet.trim() as Address,
+            wallets.map((w) => w.trim() as Address),
+            pcts.map((p) => BigInt(p)),
+            cidStr,
+            ivStr,
+          ],
+        });
+        console.log("Will created with tx hash:", txHash);
+        router.push("/wills");
+      } else {
+        alert("IPFS Output:\nCID: " + cidStr + "\nIV: " + ivStr + "\n\n(Smart contract not deployed)");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create will");
     } finally {

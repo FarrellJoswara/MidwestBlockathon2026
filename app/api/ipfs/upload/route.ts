@@ -4,7 +4,7 @@ import { encryptBuffer } from "@/lib/modules/crypto";
 
 const PINATA_PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest) { 
   const wallet = getWalletFromRequest(req);
   if (!wallet) {
     return NextResponse.json(

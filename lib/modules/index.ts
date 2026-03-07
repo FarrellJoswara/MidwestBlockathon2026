@@ -10,6 +10,16 @@ export {
 export { xrplEvmMainnet, xrplEvmTestnet } from "./chain/chains";
 export { wagmiConfig } from "./chain/wagmi-config";
 export { parseContract, type ParsedContract } from "./contract-parser/index";
+export {
+  parseWillFromCID,
+  parseWillWithGemini,
+  fetchPdfFromIPFS,
+} from "./contract-parser/index";
+export type {
+  ParsedWill,
+  Beneficiary,
+  AssetType,
+} from "./contract-parser/index";
 export { willRegistryAbi, type WillRegistryStatus } from "./contract-generator/abi";
 export type { WillFormParams, WillFormValidation } from "./ui/will-params";
 export { validateWillFormParams } from "./ui/will-params";
