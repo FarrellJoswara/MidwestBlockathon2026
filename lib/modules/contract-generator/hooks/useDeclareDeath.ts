@@ -1,10 +1,10 @@
-/* reusable hook for calling the declareDeath 
+/* reusable hook for calling the declareDeath
    function on the will registry contract */
 "use client";
 
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
-import { willRegistryAddress } from "@/lib/modules/contract-generator/config";
+import { willRegistryAbi } from "../abi";
+import { willRegistryAddress } from "../config";
 
 export function useDeclareDeath() {
   const {

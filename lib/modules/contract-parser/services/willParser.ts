@@ -13,7 +13,7 @@
  *   const parsed = await parseWillWithGemini(pdfBuffer);
  */
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { PDFParse } from "pdf-parse";
 import type { ParsedWill, Beneficiary, AssetType } from "../types/will";
 
@@ -31,7 +31,7 @@ function getGeminiClient() {
         "Set it in your .env.local file."
     );
   }
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
@@ -191,12 +191,12 @@ export async function parseWillWithGemini(
 
   // Step 3: Call Gemini
   console.log("[willParser] Sending will text to Gemini for analysis...");
-  const genAI = getGeminiClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  const result = await model.generateContent(fullPrompt);
-  const response = result.response;
-  let responseText = response.text();
+  const ai = getGeminiClient();
+  const result = await ai.models.generateContent({
+    model: "gemini-1.5-flash",
+    contents: fullPrompt,
+  });
+  let responseText = result.text?.trim();
 
   if (!responseText) {
     throw new Error("[willParser] Gemini returned an empty response.");

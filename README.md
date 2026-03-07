@@ -15,7 +15,7 @@ Web-based MVP for managing **digital wills** tied to blockchain wallet addresses
 
 - **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, **Privy** (auth), **wagmi** + **viem** on **XRPL EVM Sidechain**
 - **Backend**: Next.js API routes (Node.js)
-- **Will data**: On-chain (XRPL EVM Sidechain) via `WillRegistry` contract; see **Contract generator** (`lib/contract-generator/`)
+- **Will data**: On-chain (XRPL EVM Sidechain) via `WillRegistry` contract; see **Contract generator** (`lib/modules/contract-generator/`)
 - **Storage**: Pinata (IPFS) for encrypted will documents
 - **Deploy**: Vercel-ready
 
@@ -33,7 +33,7 @@ npm install
 
 Copy `.env.example` to `.env.local` and fill in:
 
-- **Will registry**: Deploy the contract in `lib/contract-generator/` (see that README), then set:
+- **Will registry**: Deploy the contract in `lib/modules/contract-generator/` (see that README), then set:
   - `NEXT_PUBLIC_WILL_REGISTRY_ADDRESS`
 - **Privy**: Create an app at [dashboard.privy.io](https://dashboard.privy.io). Set:
   - `NEXT_PUBLIC_PRIVY_APP_ID`
@@ -57,7 +57,7 @@ Open [http://localhost:3000](http://localhost:3000). Log in with Privy (wallet, 
    `npm run dev` → open [http://localhost:3000](http://localhost:3000).
 
 2. **Have env set**  
-   At least `NEXT_PUBLIC_PRIVY_APP_ID`. Set `NEXT_PUBLIC_WILL_REGISTRY_ADDRESS` (deploy from `lib/contract-generator/`) to create and load wills from the chain. Without the contract address, you can still test login and UI; wills list will be empty and create/update will return 501.
+   At least `NEXT_PUBLIC_PRIVY_APP_ID`. Set `NEXT_PUBLIC_WILL_REGISTRY_ADDRESS` (deploy from `lib/modules/contract-generator/`) to create and load wills from the chain. Without the contract address, you can still test login and UI; wills list will be empty and create/update will return 501.
 
 3. **Test login**  
    Click **Login** → sign in with email, Google, or wallet. You should see your address and “Log out.”
@@ -110,7 +110,7 @@ There are no automated tests yet. To add them later, you could use **Jest** + **
 
 ## Will data (on-chain)
 
-Wills are stored in the `WillRegistry` contract on XRPL EVM Sidechain. Deploy the contract from `lib/contract-generator/` (see that README), set `NEXT_PUBLIC_WILL_REGISTRY_ADDRESS`, and use the app to list wills (read from chain). Create/update/declare death/execute are done by the user from the frontend via the contract.
+Wills are stored in the `WillRegistry` contract on XRPL EVM Sidechain. Deploy the contract from `lib/modules/contract-generator/` (see that README), set `NEXT_PUBLIC_WILL_REGISTRY_ADDRESS`, and use the app to list wills (read from chain). Create/update/declare death/execute are done by the user from the frontend via the contract.
 
 ## License
 
