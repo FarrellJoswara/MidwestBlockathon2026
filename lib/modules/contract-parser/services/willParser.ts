@@ -14,7 +14,7 @@
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import * as pdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import type { ParsedWill, Beneficiary, AssetType } from "../types/will";
 
 // ── Gemini setup ──────────────────────────────────────────────────────────────
@@ -83,11 +83,12 @@ Will text:
 // ── PDF → Text ────────────────────────────────────────────────────────────────
 
 /**
- * Extract plain text from a PDF buffer using pdf-parse.
+ * Extract plain text from a PDF buffer using pdf-parse (v4 class API).
  */
 async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
-  const data = await pdfParse(pdfBuffer);
-  const text = data.text?.trim();
+  const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
+  const result = await parser.getText();
+  const text = result.text?.trim();
 
   if (!text || text.length === 0) {
     throw new Error(
@@ -97,8 +98,12 @@ async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
   }
 
   console.log(
-    `[willParser] Extracted ${text.length} characters from PDF (${data.numpages} pages).`
+    `[willParser] Extracted ${text.length} characters from PDF.`
   );
+
+  // Clean up parser resources
+  await parser.destroy();
+
   return text;
 }
 
