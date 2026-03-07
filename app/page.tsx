@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { PrivyConnectButton } from "@/components/PrivyConnectButton";
+import { PrivyConnectButton } from "../components/PrivyConnectButton";
 
 export default function HomePage() {
   const { authenticated } = usePrivy();
