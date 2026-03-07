@@ -2,7 +2,7 @@
 
 import { http } from "wagmi";
 import { createConfig } from "@privy-io/wagmi";
-import { xrplEvmMainnet, xrplEvmTestnet } from "@/lib/chains";
+import { xrplEvmMainnet, xrplEvmTestnet } from "@/lib/modules/chain/chains";
 
 export const wagmiConfig = createConfig({
   chains: [xrplEvmTestnet, xrplEvmMainnet],

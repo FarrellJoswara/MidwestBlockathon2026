@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PrivyConnectButton } from "@/components/PrivyConnectButton";
+import { PrivyConnectButton } from "@/components/layout/PrivyConnectButton";
 
 export default function Header() {
   return (

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest } from "@/lib/auth";
-import { getWillById } from "@/lib/db/supabase";
-import { getRoleForWill } from "@/lib/auth";
-import { decryptBuffer } from "@/lib/crypto";
+import { getWalletFromRequest, getRoleForWill } from "@/lib/modules/auth";
+import { getWillById } from "@/lib/modules/chain";
+import { decryptBuffer } from "@/lib/modules/crypto";
 
 export async function GET(
   req: NextRequest,

@@ -2,10 +2,10 @@
 
 import { useAccount } from "wagmi";
 import Link from "next/link";
-import { PrivyConnectButton } from "@/components/PrivyConnectButton";
+import { PrivyConnectButton } from "@/components/layout/PrivyConnectButton";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import type { WillWithRole } from "@/lib/types";
+import { apiFetch } from "@/lib/modules/api";
+import type { WillWithRole } from "@/lib/modules/types";
 
 function RoleBadge({ role }: { role: WillWithRole["role"] }) {
   if (!role) return null;

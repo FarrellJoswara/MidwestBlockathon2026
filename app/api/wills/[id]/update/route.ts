@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest, getWillWithRole } from "@/lib/auth";
-import { updateWill } from "@/lib/db/supabase";
+import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
+import { updateWill } from "@/lib/modules/chain";
 
 function parseBody(body: unknown): {
   beneficiary_wallets?: string[];
@@ -74,9 +74,20 @@ export async function PATCH(
     const will = await updateWill(id, parsed);
     return NextResponse.json({ will, role: result.role });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to update will";
+    if (msg.includes("on-chain from the frontend")) {
+      return NextResponse.json(
+        {
+          error: msg,
+          useContract: true,
+          contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
+        },
+        { status: 501 }
+      );
+    }
     console.error(e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to update will" },
+      { error: msg },
       { status: 500 }
     );
   }

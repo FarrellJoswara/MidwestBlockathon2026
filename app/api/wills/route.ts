@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest } from "@/lib/auth";
-import { getWillsByWallet } from "@/lib/db/supabase";
-import { getRoleForWill } from "@/lib/auth";
-import type { WillWithRole } from "@/lib/types";
+import { getWalletFromRequest, getRoleForWill } from "@/lib/modules/auth";
+import { getWillsByWallet } from "@/lib/modules/chain";
+import type { WillWithRole } from "@/lib/modules/types";
 
 export async function GET(req: NextRequest) {
   const wallet = getWalletFromRequest(req);

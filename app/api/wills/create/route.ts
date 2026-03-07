@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest } from "@/lib/auth";
-import { createWill } from "@/lib/db/supabase";
-import { getRoleForWill } from "@/lib/auth";
-import type { WillWithRole } from "@/lib/types";
+import { getWalletFromRequest, getRoleForWill } from "@/lib/modules/auth";
+import { createWill } from "@/lib/modules/chain";
+import type { WillWithRole } from "@/lib/modules/types";
 
 function parseBody(body: unknown): {
   creator_wallet: string;
@@ -70,9 +69,20 @@ export async function POST(req: NextRequest) {
     };
     return NextResponse.json(withRole);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to create will";
+    if (msg.includes("on-chain from the frontend")) {
+      return NextResponse.json(
+        {
+          error: msg,
+          useContract: true,
+          contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
+        },
+        { status: 501 }
+      );
+    }
     console.error(e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to create will" },
+      { error: msg },
       { status: 500 }
     );
   }

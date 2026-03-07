@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest, getWillWithRole } from "@/lib/auth";
-import { encryptBuffer } from "@/lib/crypto";
+import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
+import { encryptBuffer } from "@/lib/modules/crypto";
 
 const PINATA_PIN_URL = "https://api.pinata.cloud/pinning/pinFileToIPFS";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import type { PrivyClientConfig } from "@privy-io/react-auth";
-import { xrplEvmMainnet, xrplEvmTestnet } from "@/lib/chains";
+import { xrplEvmMainnet, xrplEvmTestnet } from "@/lib/modules/chain/chains";
 
 export const privyConfig: PrivyClientConfig = {
   appearance: {

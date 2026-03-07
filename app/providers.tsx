@@ -3,8 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider } from "@privy-io/wagmi";
-import { wagmiConfig } from "@/lib/wagmi-config";
-import { privyConfig } from "@/lib/privy-config";
+import { wagmiConfig } from "@/lib/modules/chain/wagmi-config";
+import { privyConfig } from "@/lib/modules/auth/privy-config";
 
 const queryClient = new QueryClient();
 

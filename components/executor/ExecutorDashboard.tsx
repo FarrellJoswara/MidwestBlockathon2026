@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import type { Will } from "@/lib/types";
+import { apiFetch } from "@/lib/modules/api";
+import { executorApiPaths } from "@/lib/modules/executor";
+import type { Will } from "@/lib/modules/types";
 
 interface ExecutorDashboardProps {
   will: Will;
@@ -19,7 +20,7 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
 
   const declareDeath = useMutation({
     mutationFn: () =>
-      apiFetch(`/api/wills/${will.id}/declare-death`, {
+      apiFetch(executorApiPaths.declareDeath(will.id), {
         method: "POST",
         wallet: address ?? undefined,
       }),
@@ -31,7 +32,7 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
 
   const distribute = useMutation({
     mutationFn: () =>
-      apiFetch(`/api/wills/${will.id}/distribute`, {
+      apiFetch(executorApiPaths.distribute(will.id), {
         method: "POST",
         wallet: address ?? undefined,
       }),
@@ -112,7 +113,7 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
         )}
         <p className="mt-2 text-xs text-ink-400">
           To upload a new version, update the will from the create flow or a future
-          “Replace document” action.
+          "Replace document" action.
         </p>
       </section>
 

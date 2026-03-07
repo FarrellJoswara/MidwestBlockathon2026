@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { getWillById } from "@/lib/db/supabase";
-import type { Will, WalletRole } from "@/lib/types";
+import { getWillById } from "@/lib/modules/chain";
+import type { Will, WalletRole } from "@/lib/modules/types";
 
 export function getWalletFromRequest(req: NextRequest): string | null {
   const wallet =

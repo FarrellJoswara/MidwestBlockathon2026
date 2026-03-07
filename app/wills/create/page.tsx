@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/modules/api";
+import { validateWillFormParams } from "@/lib/modules/ui";
 
 export default function CreateWillPage() {
   const { address, isConnected } = useAccount();
@@ -17,7 +18,12 @@ export default function CreateWillPage() {
   const [error, setError] = useState<string | null>(null);
 
   const totalPct = percentages.reduce((s, p) => s + p, 0);
-  const valid = creatorWallet.match(/^0x[a-fA-F0-9]{40}$/) && Math.abs(totalPct - 100) < 0.01;
+  const validation = validateWillFormParams({
+    creator_wallet: creatorWallet,
+    beneficiary_wallets: beneficiaries,
+    beneficiary_percentages: percentages,
+  });
+  const valid = validation.valid;
 
   const addBeneficiary = () => {
     setBeneficiaries((b) => [...b, ""]);
@@ -41,16 +47,21 @@ export default function CreateWillPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !valid) return;
+    const wallets = beneficiaries.filter((w) => w.trim().length > 0);
+    const pcts = percentages.slice(0, wallets.length);
+    const check = validateWillFormParams({
+      creator_wallet: creatorWallet,
+      beneficiary_wallets: wallets,
+      beneficiary_percentages: pcts,
+    });
+    if (!check.valid) {
+      setError(check.error ?? "Invalid params");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const wallets = beneficiaries.filter((w) => w.trim().length > 0);
-      const pcts = percentages.slice(0, wallets.length);
-      if (wallets.length === 0 || pcts.reduce((s, x) => s + x, 0) !== 100) {
-        setError("Beneficiaries and percentages must sum to 100.");
-        setLoading(false);
-        return;
-      }
       const will = await apiFetch("/api/wills/create", {
         method: "POST",
         wallet: address,
@@ -188,7 +199,9 @@ export default function CreateWillPage() {
               ))}
             </div>
             {Math.abs(totalPct - 100) > 0.01 && (
-              <p className="mt-1 text-sm text-amber-700">Total: {totalPct}% (must be 100%)</p>
+              <p className="mt-1 text-sm text-amber-700">
+                {validation.error ?? `Total: ${totalPct}% (must be 100%)`}
+              </p>
             )}
           </div>
           {error && (

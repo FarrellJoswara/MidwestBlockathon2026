@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest, getWillWithRole } from "@/lib/auth";
-import { updateWill } from "@/lib/db/supabase";
-import { executeDistribution } from "@/lib/blockchain";
+import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
+import { updateWill } from "@/lib/modules/chain";
+import { executeDistribution } from "@/lib/modules/executor";
 
 export async function POST(
   req: NextRequest,
@@ -40,9 +40,20 @@ export async function POST(
     const will = await updateWill(id, { status: "executed" });
     return NextResponse.json({ will, distribution_plan: plan });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to execute distribution";
+    if (msg.includes("on-chain from the frontend")) {
+      return NextResponse.json(
+        {
+          error: msg,
+          useContract: true,
+          contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
+        },
+        { status: 501 }
+      );
+    }
     console.error(e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to execute distribution" },
+      { error: msg },
       { status: 500 }
     );
   }

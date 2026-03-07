@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest, getWillWithRole } from "@/lib/auth";
-import { updateWill } from "@/lib/db/supabase";
+import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
+import { updateWill } from "@/lib/modules/chain";
 
 export async function POST(
   req: NextRequest,
@@ -31,9 +31,20 @@ export async function POST(
     const will = await updateWill(id, { status: "death_declared" });
     return NextResponse.json({ will });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to declare death";
+    if (msg.includes("on-chain from the frontend")) {
+      return NextResponse.json(
+        {
+          error: msg,
+          useContract: true,
+          contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
+        },
+        { status: 501 }
+      );
+    }
     console.error(e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to declare death" },
+      { error: msg },
       { status: 500 }
     );
   }

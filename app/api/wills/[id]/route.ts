@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWalletFromRequest, getWillWithRole } from "@/lib/auth";
+import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
 
 export async function GET(
   req: NextRequest,

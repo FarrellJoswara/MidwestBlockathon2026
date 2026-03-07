@@ -5,8 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import type { Will } from "@/lib/types";
+import { apiFetch } from "@/lib/modules/api";
+import type { Will } from "@/lib/modules/types";
 
 export default function EditWillPage() {
   const params = useParams();

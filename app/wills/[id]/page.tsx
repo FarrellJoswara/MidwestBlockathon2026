@@ -5,15 +5,15 @@ import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { apiFetch } from "@/lib/api";
-import type { Will, WalletRole } from "@/lib/types";
+import { apiFetch } from "@/lib/modules/api";
+import type { Will, WalletRole } from "@/lib/modules/types";
 
 const ExecutorDashboard = dynamic(
-  () => import("@/components/ExecutorDashboard").then((m) => ({ default: m.ExecutorDashboard })),
+  () => import("@/components/executor/ExecutorDashboard").then((m) => ({ default: m.ExecutorDashboard })),
   { loading: () => <p className="text-ink-500">Loading…</p> }
 );
 const BeneficiaryDashboard = dynamic(
-  () => import("@/components/BeneficiaryDashboard").then((m) => ({ default: m.BeneficiaryDashboard })),
+  () => import("@/components/beneficiary/BeneficiaryDashboard").then((m) => ({ default: m.BeneficiaryDashboard })),
   { loading: () => <p className="text-ink-500">Loading…</p> }
 );
 
