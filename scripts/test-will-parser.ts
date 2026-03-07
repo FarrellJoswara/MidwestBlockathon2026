@@ -47,19 +47,20 @@ function testTypedSchema() {
 
   const mockWill: ParsedWill = {
     testator_name: "John Doe",
-    testator_address: "0x1234567890abcdef1234567890abcdef12345678",
+    testator_placeholderId: "john_doe",
     executor_name: "Jane Smith",
-    executor_address: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+    executor_placeholderId: "jane_smith",
     beneficiaries: [
       {
         name: "Alice Johnson",
-        walletAddress: "0x1111111111111111111111111111111111111111",
+        placeholderId: "alice_johnson",
         assetDescription: "50% of ETH holdings",
         assetType: "ETH",
         amount: "5.0",
       },
       {
         name: "Bob Williams",
+        placeholderId: "bob_williams",
         assetDescription: "Family house",
         assetType: "OTHER",
       },
@@ -69,9 +70,11 @@ function testTypedSchema() {
   };
 
   assert(mockWill.testator_name === "John Doe", "testator_name is set");
+  assert(mockWill.testator_placeholderId === "john_doe", "testator placeholder is snake_case name");
   assert(mockWill.beneficiaries.length === 2, "2 beneficiaries");
   assert(mockWill.beneficiaries[0].assetType === "ETH", "first beneficiary assetType = ETH");
-  assert(mockWill.beneficiaries[1].walletAddress === undefined, "second beneficiary has no wallet");
+  assert(mockWill.beneficiaries[0].placeholderId === "alice_johnson", "first beneficiary has placeholderId");
+  assert(mockWill.beneficiaries[1].placeholderId === "bob_williams", "second beneficiary has placeholderId");
   assert(mockWill.conditions!.length === 1, "1 condition");
 
   // Verify JSON round-trip

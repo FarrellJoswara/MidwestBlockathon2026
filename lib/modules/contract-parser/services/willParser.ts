@@ -13,9 +13,24 @@
  *   const parsed = await parseWillWithGemini(pdfBuffer);
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { PDFParse } from "pdf-parse";
 import type { ParsedWill, Beneficiary, AssetType } from "../types/will";
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Convert a full name to a stable, snake_case placeholder ID.
+ * e.g. "Alice Johnson" → "alice_johnson"
+ * The address-resolution pipeline stage replaces these with real 0x addresses.
+ */
+function toPlaceholderId(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
 
 // ── Gemini setup ──────────────────────────────────────────────────────────────
 
@@ -31,7 +46,7 @@ function getGeminiClient() {
         "Set it in your .env.local file."
     );
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenerativeAI(apiKey);
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
@@ -46,17 +61,23 @@ You are a legal document analysis assistant specialising in last will and testam
 Analyse the following will text and extract structured information.
 Return ONLY valid JSON — no markdown, no explanation, no code fences.
 
+IMPORTANT: The PDF will NOT contain wallet addresses. Do NOT fabricate any.
+Instead, for every person (testator, executor, beneficiary), generate a
+"placeholderId" — a lowercase, underscore-separated version of their full name
+(e.g. "Alice Johnson" → "alice_johnson"). A later pipeline stage will resolve
+these placeholders into real wallet addresses.
+
 The JSON must match this exact schema:
 
 {
   "testator_name": "string or null",
-  "testator_address": "string or null — physical or wallet address",
+  "testator_placeholderId": "string or null — lowercase_underscored name",
   "executor_name": "string or null",
-  "executor_address": "string or null — wallet address if present",
+  "executor_placeholderId": "string or null — lowercase_underscored name",
   "beneficiaries": [
     {
       "name": "string — full legal name of the beneficiary",
-      "walletAddress": "string or null — Ethereum wallet address if mentioned",
+      "placeholderId": "string — lowercase_underscored version of name",
       "assetDescription": "string — description of the bequeathed asset",
       "assetType": "one of: ETH, ERC20, ERC721, OTHER",
       "amount": "string or null — amount, percentage, or token ID"
@@ -74,7 +95,7 @@ Rules:
     • ERC721 — NFTs or unique digital assets
     • OTHER — real estate, physical assets, or unclassifiable items
 - Extract ALL beneficiaries mentioned.
-- If wallet addresses (0x...) appear anywhere, capture them.
+- Do NOT include any wallet addresses — they will be resolved later.
 - Ignore boilerplate legal language unrelated to asset distribution.
 
 Will text:
@@ -140,9 +161,15 @@ function validateParsedWill(raw: Record<string, unknown>): ParsedWill {
         ? (b.assetType as AssetType)
         : "OTHER";
 
+      // Build placeholder from name: "Alice Johnson" → "alice_johnson"
+      const placeholderId: string =
+        typeof b.placeholderId === "string" && b.placeholderId.length > 0
+          ? b.placeholderId
+          : toPlaceholderId(b.name as string);
+
       return {
         name: b.name as string,
-        walletAddress: typeof b.walletAddress === "string" ? b.walletAddress : undefined,
+        placeholderId,
         assetDescription: b.assetDescription as string,
         assetType,
         amount: typeof b.amount === "string" ? b.amount : undefined,
@@ -153,12 +180,20 @@ function validateParsedWill(raw: Record<string, unknown>): ParsedWill {
   const parsed: ParsedWill = {
     testator_name:
       typeof raw.testator_name === "string" ? raw.testator_name : undefined,
-    testator_address:
-      typeof raw.testator_address === "string" ? raw.testator_address : undefined,
+    testator_placeholderId:
+      typeof raw.testator_placeholderId === "string"
+        ? raw.testator_placeholderId
+        : typeof raw.testator_name === "string"
+          ? toPlaceholderId(raw.testator_name as string)
+          : undefined,
     executor_name:
       typeof raw.executor_name === "string" ? raw.executor_name : undefined,
-    executor_address:
-      typeof raw.executor_address === "string" ? raw.executor_address : undefined,
+    executor_placeholderId:
+      typeof raw.executor_placeholderId === "string"
+        ? raw.executor_placeholderId
+        : typeof raw.executor_name === "string"
+          ? toPlaceholderId(raw.executor_name as string)
+          : undefined,
     beneficiaries,
     conditions: Array.isArray(raw.conditions)
       ? raw.conditions.filter((c: unknown) => typeof c === "string")
@@ -191,12 +226,12 @@ export async function parseWillWithGemini(
 
   // Step 3: Call Gemini
   console.log("[willParser] Sending will text to Gemini for analysis...");
-  const ai = getGeminiClient();
-  const result = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
-    contents: fullPrompt,
-  });
-  let responseText = result.text?.trim();
+  const genAI = getGeminiClient();
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const result = await model.generateContent(fullPrompt);
+  const response = result.response;
+  let responseText = response.text();
 
   if (!responseText) {
     throw new Error("[willParser] Gemini returned an empty response.");
