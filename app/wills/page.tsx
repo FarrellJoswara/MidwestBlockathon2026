@@ -39,7 +39,7 @@ export default function WillsListPage() {
         <header className="border-b border-ink-200 bg-parchment/95">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
             <Link href="/" className="font-semibold text-ink-900">
-              ◆ Blockchain Inheritance
+              ◆ dihhapp
             </Link>
           </div>
         </header>
@@ -61,7 +61,7 @@ export default function WillsListPage() {
       <header className="sticky top-0 z-50 border-b border-ink-200 bg-parchment/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <Link href="/" className="font-semibold text-ink-900">
-            ◆ Blockchain Inheritance
+            ◆ dihhapp
           </Link>
           <Link href="/wills/create" className="rounded-lg bg-ink-900 px-4 py-2 text-sm text-white hover:bg-ink-800">
             Create Will

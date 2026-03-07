@@ -1,4 +1,4 @@
-# Blockchain Inheritance Distribution — MVP
+# dihhapp — Digital Will Distribution MVP
 
 Web-based MVP for managing **digital wills** tied to blockchain wallet addresses. The platform does not create legal wills; it manages distribution instructions. Each will has a **creator wallet**, an **executor** (full management rights), and **beneficiaries** with percentage allocations.
 

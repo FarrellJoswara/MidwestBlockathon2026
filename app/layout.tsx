@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Providers } from "./providers";
+import ClientProviders from "./ClientProviders";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Blockchain Inheritance | Digital Will Distribution",
+  title: "dihhapp | Digital Will Distribution",
   description: "Manage digital wills and inheritance distribution on blockchain",
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="scroll-smooth">
       <body className={`${inter.variable} font-sans`} style={{ backgroundColor: "#faf8f4", color: "#1f1d1b" }}>
-        <Providers>{children}</Providers>
+        <ClientProviders>{children}</ClientProviders>
       </body>
     </html>
   );

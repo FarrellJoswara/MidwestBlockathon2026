@@ -1,17 +1,24 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { apiFetch } from "@/lib/api";
-import { ExecutorDashboard } from "@/components/ExecutorDashboard";
-import { BeneficiaryDashboard } from "@/components/BeneficiaryDashboard";
 import type { Will, WalletRole } from "@/lib/types";
+
+const ExecutorDashboard = dynamic(
+  () => import("@/components/ExecutorDashboard").then((m) => ({ default: m.ExecutorDashboard })),
+  { loading: () => <p className="text-ink-500">Loading…</p> }
+);
+const BeneficiaryDashboard = dynamic(
+  () => import("@/components/BeneficiaryDashboard").then((m) => ({ default: m.BeneficiaryDashboard })),
+  { loading: () => <p className="text-ink-500">Loading…</p> }
+);
 
 export default function WillDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params.id as string;
   const { address, isConnected } = useAccount();
 

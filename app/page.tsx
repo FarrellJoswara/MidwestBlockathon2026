@@ -16,7 +16,7 @@ export default function HomePage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2 font-semibold text-ink-900">
             <span className="text-seal">◆</span>
-            Blockchain Inheritance
+            dihhapp
           </Link>
           <div className="flex items-center gap-4">
             {isConnected && (
