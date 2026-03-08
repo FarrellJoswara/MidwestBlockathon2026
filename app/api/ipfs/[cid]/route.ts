@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWalletFromRequest, getRoleForWill } from "@/lib/modules/auth";
 import { getWillById } from "@/lib/modules/chain";
 import { decryptBuffer } from "@/lib/modules/crypto";
-import { handleApiError, errorResponse } from "@/lib/api-helpers";
-import { ErrorCodes } from "@/lib/errors";
 
 export async function GET(
   req: NextRequest,
@@ -11,64 +9,56 @@ export async function GET(
 ) {
   const wallet = getWalletFromRequest(req);
   if (!wallet) {
-    return errorResponse(
-      "Missing or invalid x-wallet-address header",
-      ErrorCodes.UNAUTHORIZED,
-      401,
+    return NextResponse.json(
+      { error: "Missing or invalid x-wallet-address header" },
+      { status: 401 }
     );
   }
   const { cid } = await params;
   const willId = req.nextUrl.searchParams.get("will_id");
-  const iv = req.nextUrl.searchParams.get("iv");
-  if (!willId || !iv) {
-    return errorResponse(
-      "Query params will_id and iv required",
-      ErrorCodes.VALIDATION_ERROR,
-      400,
+  const iv = req.nextUrl.searchParams.get("iv") ?? "";
+  if (!willId) {
+    return NextResponse.json(
+      { error: "Query param will_id required" },
+      { status: 400 }
     );
   }
   const will = await getWillById(willId);
   if (!will) {
-    return errorResponse("Will not found", ErrorCodes.NOT_FOUND, 404);
+    return NextResponse.json({ error: "Will not found" }, { status: 404 });
   }
   const role = getRoleForWill(will, wallet);
   if (!role || role === null) {
-    return errorResponse(
-      "Access denied to this will document",
-      ErrorCodes.FORBIDDEN,
-      403,
-    );
+    return NextResponse.json({ error: "Access denied to this will document" }, { status: 403 });
   }
-  if (will.ipfs_cid !== cid || will.encrypted_doc_key_iv !== iv) {
-    return errorResponse(
-      "CID or IV does not match will record",
-      ErrorCodes.VALIDATION_ERROR,
-      400,
+  const willIv = will.encrypted_doc_key_iv ?? "";
+  if (will.ipfs_cid !== cid || willIv !== iv) {
+    return NextResponse.json(
+      { error: "CID or IV does not match will record" },
+      { status: 400 }
     );
   }
   const gateway = process.env.IPFS_GATEWAY ?? "https://gateway.pinata.cloud/ipfs/";
   const res = await fetch(`${gateway}${cid}`);
   if (!res.ok) {
-    console.error(`[ipfs] Failed to fetch CID ${cid}: ${res.status} ${res.statusText}`);
-    return errorResponse(
-      "Failed to fetch document from IPFS",
-      ErrorCodes.IPFS_FETCH_FAILED,
-      502,
+    return NextResponse.json(
+      { error: "Failed to fetch from IPFS" },
+      { status: 502 }
     );
   }
-  const encrypted = Buffer.from(await res.arrayBuffer());
-  let decrypted: Buffer;
-  try {
-    decrypted = decryptBuffer(encrypted, iv);
-  } catch (err) {
-    console.error("[ipfs] Decryption failed:", err);
-    return errorResponse(
-      "Failed to decrypt document",
-      ErrorCodes.DECRYPTION_FAILED,
-      500,
-    );
+  const raw = Buffer.from(await res.arrayBuffer());
+  let body: Buffer;
+  if (iv && iv.length > 0) {
+    try {
+      body = decryptBuffer(raw, iv);
+    } catch (e) {
+      console.error(e);
+      return NextResponse.json({ error: "Decryption failed" }, { status: 500 });
+    }
+  } else {
+    body = raw;
   }
-  return new NextResponse(new Uint8Array(decrypted), {
+  return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": 'attachment; filename="will-document.pdf"',

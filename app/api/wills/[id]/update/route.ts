@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
 import { updateWill } from "@/lib/modules/chain";
-import { handleApiError, errorResponse } from "@/lib/api-helpers";
-import { ErrorCodes } from "@/lib/errors";
+import type { WillPool } from "@/lib/modules/types";
 
 function parseBody(body: unknown): {
+  pools?: WillPool[];
   beneficiary_wallets?: string[];
   beneficiary_percentages?: number[];
   ipfs_cid?: string | null;
@@ -12,6 +12,30 @@ function parseBody(body: unknown): {
 } | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
+  const ipfs_cid = typeof b.ipfs_cid === "string" ? b.ipfs_cid : undefined;
+  const encrypted_doc_key_iv =
+    typeof b.encrypted_doc_key_iv === "string" ? b.encrypted_doc_key_iv : undefined;
+
+  if (Array.isArray(b.pools) && b.pools.length > 0) {
+    const pools = b.pools as unknown[];
+    const valid: WillPool[] = [];
+    for (const p of pools) {
+      if (!p || typeof p !== "object") return null;
+      const po = p as Record<string, unknown>;
+      const name = typeof po.name === "string" ? po.name : "Fund";
+      const wallets = Array.isArray(po.beneficiary_wallets)
+        ? (po.beneficiary_wallets as string[]).filter((x) => typeof x === "string")
+        : [];
+      const pcts = Array.isArray(po.beneficiary_percentages)
+        ? (po.beneficiary_percentages as number[]).filter((x) => typeof x === "number")
+        : [];
+      if (wallets.length === 0 || wallets.length !== pcts.length) return null;
+      if (Math.abs(pcts.reduce((s, n) => s + n, 0) - 100) > 0.01) return null;
+      valid.push({ name, beneficiary_wallets: wallets, beneficiary_percentages: pcts });
+    }
+    return { pools: valid, ipfs_cid, encrypted_doc_key_iv };
+  }
+
   const beneficiaries = Array.isArray(b.beneficiary_wallets)
     ? (b.beneficiary_wallets as string[]).filter((x) => typeof x === "string")
     : undefined;
@@ -20,9 +44,6 @@ function parseBody(body: unknown): {
     : undefined;
   if (beneficiaries && percentages && beneficiaries.length !== percentages.length) return null;
   if (percentages && Math.abs(percentages.reduce((s, p) => s + p, 0) - 100) > 0.01) return null;
-  const ipfs_cid = typeof b.ipfs_cid === "string" ? b.ipfs_cid : undefined;
-  const encrypted_doc_key_iv =
-    typeof b.encrypted_doc_key_iv === "string" ? b.encrypted_doc_key_iv : undefined;
   return {
     beneficiary_wallets: beneficiaries,
     beneficiary_percentages: percentages,
@@ -37,46 +58,40 @@ export async function PATCH(
 ) {
   const wallet = getWalletFromRequest(req);
   if (!wallet) {
-    return errorResponse(
-      "Missing or invalid x-wallet-address header",
-      ErrorCodes.UNAUTHORIZED,
-      401,
+    return NextResponse.json(
+      { error: "Missing or invalid x-wallet-address header" },
+      { status: 401 }
     );
   }
   const { id } = await params;
   const result = await getWillWithRole(id, wallet);
   if (!result || result.role !== "executor") {
-    return errorResponse(
-      "Will not found or only executor can update",
-      ErrorCodes.FORBIDDEN,
-      403,
-    );
+    return NextResponse.json({ error: "Will not found or only executor can update" }, { status: 403 });
   }
   if (result.will.status !== "active") {
-    return errorResponse(
-      "Cannot update will after death declaration or execution",
-      ErrorCodes.VALIDATION_ERROR,
-      400,
+    return NextResponse.json(
+      { error: "Cannot update will after death declaration or execution" },
+      { status: 400 }
     );
   }
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return errorResponse("Invalid JSON", ErrorCodes.VALIDATION_ERROR, 400);
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
   const parsed = parseBody(body);
   if (
     !parsed ||
-    (!parsed.beneficiary_wallets &&
+    (!parsed.pools &&
+      !parsed.beneficiary_wallets &&
       !parsed.beneficiary_percentages &&
       parsed.ipfs_cid === undefined &&
       parsed.encrypted_doc_key_iv === undefined)
   ) {
-    return errorResponse(
-      "Provide at least one: beneficiary_wallets/percentages, or ipfs_cid+encrypted_doc_key_iv",
-      ErrorCodes.VALIDATION_ERROR,
-      400,
+    return NextResponse.json(
+      { error: "Provide at least one: pools, beneficiary_wallets/percentages, or ipfs_cid+encrypted_doc_key_iv" },
+      { status: 400 }
     );
   }
   try {
@@ -85,11 +100,19 @@ export async function PATCH(
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to update will";
     if (msg.includes("on-chain from the frontend")) {
-      return errorResponse(msg, ErrorCodes.INTERNAL_ERROR, 501, {
-        useContract: true,
-        contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
-      });
+      return NextResponse.json(
+        {
+          error: msg,
+          useContract: true,
+          contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
+        },
+        { status: 501 }
+      );
     }
-    return handleApiError(e, "wills/update");
+    console.error(e);
+    return NextResponse.json(
+      { error: msg },
+      { status: 500 }
+    );
   }
 }

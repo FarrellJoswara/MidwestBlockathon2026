@@ -95,8 +95,8 @@ export default function WillDetailPage() {
 
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="sticky top-0 z-50 border-b border-ink-200/60 bg-parchment/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+      <main className="mx-auto max-w-2xl px-6 py-12">
+        <div className="flex items-center justify-between gap-4">
           <Link
             href="/wills"
             className="text-sm text-ink-500 transition-colors hover:text-ink-900"
@@ -105,10 +105,7 @@ export default function WillDetailPage() {
           </Link>
           <span className={badgeCls}>{role}</span>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-6 py-12">
-        <h1 className="font-serif text-2xl font-bold text-ink-950">
+        <h1 className="mt-6 font-serif text-2xl font-bold text-ink-950">
           Will Details
         </h1>
         <p className="mt-1 text-sm text-ink-400">

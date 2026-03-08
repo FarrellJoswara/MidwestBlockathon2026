@@ -30,6 +30,7 @@ export { getWalletFromRequest, getRoleForWill, getWillWithRole, privyConfig } fr
 export { encryptBuffer, decryptBuffer } from "./crypto/index";
 export type {
   Will,
+  WillPool,
   WillInsert,
   WillUpdate,
   WillStatus,

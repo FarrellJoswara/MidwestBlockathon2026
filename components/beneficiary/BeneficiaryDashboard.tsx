@@ -17,22 +17,50 @@ export function BeneficiaryDashboard({ will }: BeneficiaryDashboardProps) {
         <h2 className="font-serif text-lg font-semibold text-ink-900">
           Your Allocation
         </h2>
-        <ul className="mt-4 divide-y divide-ink-100">
-          {will.beneficiary_wallets.map((w, i) => (
-            <li key={w} className="flex justify-between py-2.5 text-sm">
-              <span className="font-mono text-ink-700">
-                {address?.toLowerCase() === w.toLowerCase() ? (
-                  <span className="font-sans font-medium text-wine">You</span>
-                ) : (
-                  w
-                )}
-              </span>
-              <span className="font-medium text-ink-500">
-                {will.beneficiary_percentages[i]}%
-              </span>
-            </li>
-          ))}
-        </ul>
+        {will.pools && will.pools.length > 0 ? (
+          <div className="mt-4 space-y-4">
+            {will.pools.map((pool, pi) => (
+                <div key={pi}>
+                  <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                    {pool.name}
+                  </p>
+                  <ul className="mt-2 divide-y divide-ink-100">
+                    {pool.beneficiary_wallets.map((w, i) => (
+                      <li key={`${pi}-${w}`} className="flex justify-between py-2 text-sm">
+                        <span className="font-mono text-ink-700">
+                          {address?.toLowerCase() === w.toLowerCase() ? (
+                            <span className="font-sans font-medium text-wine">You</span>
+                          ) : (
+                            w
+                          )}
+                        </span>
+                        <span className="font-medium text-ink-500">
+                          {pool.beneficiary_percentages[i]}%
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <ul className="mt-4 divide-y divide-ink-100">
+            {will.beneficiary_wallets.map((w, i) => (
+              <li key={w} className="flex justify-between py-2.5 text-sm">
+                <span className="font-mono text-ink-700">
+                  {address?.toLowerCase() === w.toLowerCase() ? (
+                    <span className="font-sans font-medium text-wine">You</span>
+                  ) : (
+                    w
+                  )}
+                </span>
+                <span className="font-medium text-ink-500">
+                  {will.beneficiary_percentages[i]}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* ── Status ─────────────────────────────────────────── */}

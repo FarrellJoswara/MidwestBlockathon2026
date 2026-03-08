@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount } from "wagmi";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/modules/api";
 import { executorApiPaths } from "@/lib/modules/executor";
 import type { Will } from "@/lib/modules/types";
+import { useEffect } from "react";
 import { useDeclareDeath } from "@/lib/modules/contract-generator/hooks/useDeclareDeath";
-import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
-import { type Address } from "viem";
-
-const CONTRACT_ADDRESS = process.env
-  .NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
 interface ExecutorDashboardProps {
   will: Will;
@@ -23,7 +19,6 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
   const queryClient = useQueryClient();
   const [declareConfirm, setDeclareConfirm] = useState(false);
   const [distributeConfirm, setDistributeConfirm] = useState(false);
-  const { writeContractAsync, isPending: isExecutePending, error: executeError } = useWriteContract();
 
   const {
     declareDeath: declareDeathOnChain,
@@ -50,21 +45,17 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
     },
   });
 
-  const executeDistribution = async () => {
-    if (!CONTRACT_ADDRESS || !will) return;
-    try {
-      await writeContractAsync({
-        address: CONTRACT_ADDRESS,
-        abi: willRegistryAbi,
-        functionName: "markExecuted",
-        args: [BigInt(will.id)],
-      });
+  const distribute = useMutation({
+    mutationFn: () =>
+      apiFetch(executorApiPaths.distribute(will.id), {
+        method: "POST",
+        wallet: address ?? undefined,
+      }),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["will", will.id, address] });
       setDistributeConfirm(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    },
+  });
 
   useEffect(() => {
     if (isSuccess && declareDeathHash && !declareDeathSync.isPending) {
@@ -73,8 +64,11 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
   }, [isSuccess, declareDeathHash, declareDeathSync]);
 
   const downloadDoc = () => {
-    if (!will.ipfs_cid || !will.encrypted_doc_key_iv || !address) return;
-    const url = `/api/ipfs/${encodeURIComponent(will.ipfs_cid)}?will_id=${encodeURIComponent(will.id)}&iv=${encodeURIComponent(will.encrypted_doc_key_iv)}`;
+    if (!will.ipfs_cid || !address) return;
+    const ivParam = will.encrypted_doc_key_iv
+      ? `&iv=${encodeURIComponent(will.encrypted_doc_key_iv)}`
+      : "";
+    const url = `/api/ipfs/${encodeURIComponent(will.ipfs_cid)}?will_id=${encodeURIComponent(will.id)}${ivParam}`;
     const a = document.createElement("a");
     a.href = url;
     a.setAttribute("download", "will-document.pdf");
@@ -143,7 +137,7 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
         </h2>
         {will.ipfs_cid ? (
           <div className="mt-4 flex items-center gap-4">
-            <p className="text-sm text-ink-500">Stored on IPFS (encrypted)</p>
+            <p className="text-sm text-ink-500">Stored on IPFS</p>
             <button type="button" onClick={downloadDoc} className="btn-outlined text-xs">
               Download PDF
             </button>
@@ -162,16 +156,38 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
         <h2 className="font-serif text-lg font-semibold text-ink-900">
           Beneficiaries
         </h2>
-        <ul className="mt-4 divide-y divide-ink-100">
-          {will.beneficiary_wallets.map((w, i) => (
-            <li key={w} className="flex justify-between py-2.5 text-sm">
-              <span className="font-mono text-ink-700">{w}</span>
-              <span className="font-medium text-ink-500">
-                {will.beneficiary_percentages[i]}%
-              </span>
-            </li>
-          ))}
-        </ul>
+        {will.pools && will.pools.length > 0 ? (
+          <div className="mt-4 space-y-4">
+            {will.pools.map((pool, pi) => (
+              <div key={pi}>
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                  {pool.name}
+                </p>
+                <ul className="mt-2 divide-y divide-ink-100">
+                  {pool.beneficiary_wallets.map((w, i) => (
+                    <li key={`${pi}-${w}`} className="flex justify-between py-2 text-sm">
+                      <span className="font-mono text-ink-700">{w}</span>
+                      <span className="font-medium text-ink-500">
+                        {pool.beneficiary_percentages[i]}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ul className="mt-4 divide-y divide-ink-100">
+            {will.beneficiary_wallets.map((w, i) => (
+              <li key={w} className="flex justify-between py-2.5 text-sm">
+                <span className="font-mono text-ink-700">{w}</span>
+                <span className="font-medium text-ink-500">
+                  {will.beneficiary_percentages[i]}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <Link
           href={`/wills/${will.id}/edit`}
           className="mt-4 inline-block text-sm text-wine transition-colors hover:text-wine/80"
@@ -255,11 +271,11 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={executeDistribution}
-                disabled={isExecutePending}
+                onClick={() => distribute.mutate()}
+                disabled={distribute.isPending}
                 className="btn-primary disabled:opacity-50"
               >
-                {isExecutePending ? "Processing…" : "Confirm"}
+                {distribute.isPending ? "Processing…" : "Confirm"}
               </button>
               <button
                 type="button"
@@ -269,13 +285,6 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
                 Cancel
               </button>
             </div>
-          )}
-          {executeError && (
-            <p className="mt-3 text-sm text-wine">
-              {executeError instanceof Error
-                ? executeError.message
-                : "Failed to execute distribution"}
-            </p>
           )}
         </section>
       )}

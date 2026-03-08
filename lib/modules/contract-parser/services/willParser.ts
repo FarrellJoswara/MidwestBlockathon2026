@@ -4,7 +4,7 @@
  * Pipeline:
  *   1. Extract text from the PDF (pdf-parse)
  *   2. Build a structured prompt
- *   3. Send to Gemini via centralized wrapper
+ *   3. Send to Gemini (gemini-1.5-flash)
  *   4. Parse and validate the JSON response
  *   5. Return a typed ParsedWill object
  *
@@ -13,13 +13,8 @@
  *   const parsed = await parseWillWithGemini(pdfBuffer);
  */
 
-import { callGemini } from "@/lib/gemini";
-import { AppError, ErrorCodes } from "@/lib/errors";
+import { GoogleGenAI } from "@google/genai";
 import type { ParsedWill, Beneficiary, AssetType } from "../types/will";
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +29,23 @@ function toPlaceholderId(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
+}
+
+// ── Gemini setup ──────────────────────────────────────────────────────────────
+
+/**
+ * Initialise the Gemini client.
+ * Reads `GEMINI_API_KEY` from the environment (server-side only).
+ */
+function getGeminiClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "[willParser] Missing GEMINI_API_KEY environment variable. " +
+        "Set it in your .env.local file."
+    );
+  }
+  return new GoogleGenAI({ apiKey });
 }
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
@@ -57,7 +69,6 @@ these placeholders into real wallet addresses.
 The JSON must match this exact schema:
 
 {
-  "description": "string — a concise 1–2 sentence summary of the entire will",
   "testator_name": "string or null",
   "testator_placeholderId": "string or null — lowercase_underscored name",
   "executor_name": "string or null",
@@ -66,32 +77,34 @@ The JSON must match this exact schema:
     {
       "name": "string — full legal name of the beneficiary",
       "placeholderId": "string — lowercase_underscored version of name",
-      "assetDescription": "string — concise phrase describing the asset",
+      "assetDescription": "string — SHORT intuitive label (see rules below). Never copy long legal phrases.",
       "assetType": "one of: CASH, PROPERTY, VEHICLE, PERSONAL_ITEM, OTHER",
-      "amount": "string or null — dollar amount, percentage, or descriptive quantity"
+      "amount": "string or null — ONLY use for percentage share of estate/residue: the number with or without % (e.g. \"50\", \"50%\", \"25%\"). For specific dollar amounts or items leave null and put the description in assetDescription"
     }
   ],
-  "conditions": ["string — short, actionable condition"],
-  "additionalInstructions": "string or null — brief summary of supplementary instructions"
+  "conditions": ["string — any conditions for distribution"],
+  "additionalInstructions": "string or null — any supplementary instructions"
 }
 
-Formatting rules:
-- "description": Write a polished 1–2 sentence summary of the will. Include testator name, number of beneficiaries, and key asset types. Example: "Last will of Marcus Rivera distributing cash, property, and a vehicle among three family members and one charity. Jasmine Carter appointed as executor."
-- "assetDescription": Keep each description to a concise, human-readable phrase. Omit verbose legal phrasing. Examples: "$10,000 from savings account", "Family home at 4521 Maple Dr, Evanston, IL", "2016 Honda Accord sedan".
-- "conditions": Write each condition as a single brief sentence. Example: "Beneficiaries must be 18+ at time of distribution."
-- "additionalInstructions": Summarise in 1–2 sentences; omit boilerplate.
-
-General rules:
+Rules:
 - If a field is not found in the document, set it to null or omit it.
+- **amount**: Use ONLY when the will specifies a percentage share (e.g. \"50% of my estate\", \"one-third\"). Output the number as \"50\", \"33\", or \"50%\". Do NOT put dollar amounts here (e.g. \"$10,000\" or \"10k\" must not go in amount — put them in assetDescription and set amount to null).
 - For assetType, classify as:
-    • CASH — money, bank accounts, dollar amounts, savings, financial accounts
+    • CASH — money, bank accounts, dollar amounts, savings, financial accounts (use for percentage shares of residue and for cash bequests)
     • PROPERTY — real estate, houses, land, buildings
     • VEHICLE — cars, trucks, boats, motorcycles
     • PERSONAL_ITEM — jewelry, art, furniture, electronics, heirlooms, collectibles
     • OTHER — anything that does not fit the above categories
-- Extract ALL beneficiaries mentioned.
+- Extract ALL beneficiaries and ALL bequests. One row per distinct bequest (e.g. one row for \"Alice gets 50%\" and another for \"Alice gets the house\").
 - Do NOT include any wallet addresses — they will be resolved later.
 - Ignore boilerplate legal language unrelated to asset distribution.
+- **assetDescription — keep it SHORT and intuitive.** Do NOT copy long legal wording. Do NOT include addresses in the label. Use these patterns:
+  • Real estate / residence: \"Home\", \"Property\", or \"Residence\" — do not add the street address or city.
+  • Vehicles: \"Vehicle: [make/model]\" or \"Car: [year make model]\" (e.g. \"Vehicle: 2016 Honda Accord\").
+  • Cash: \"$X from [source]\" or \"$X savings\" (e.g. \"$10,000 from bank\", \"5k from savings\").
+  • Personal items: \"Jewelry\", \"Art collection\", \"Furniture\", \"Electronics\" — one short phrase, not a sentence.
+  • Percentage shares: \"Residuary share\" or \"Estate share\".
+  Keep labels to a few words; never include full addresses in assetDescription.
 
 Will text:
 `;
@@ -109,14 +122,15 @@ async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
   const text = result.text?.trim();
 
   if (!text || text.length === 0) {
-    throw new AppError(
-      "Could not extract any text from the PDF. The file may be image-based or empty.",
-      ErrorCodes.VALIDATION_ERROR,
-      400,
+    throw new Error(
+      "[willParser] Could not extract any text from the PDF. " +
+        "The file may be image-based or empty."
     );
   }
 
-  console.log(`[willParser] Extracted ${text.length} characters from PDF.`);
+  console.log(
+    `[willParser] Extracted ${text.length} characters from PDF.`
+  );
 
   // Clean up parser resources
   await parser.destroy();
@@ -141,17 +155,13 @@ function validateParsedWill(raw: Record<string, unknown>): ParsedWill {
   const beneficiaries: Beneficiary[] = rawBeneficiaries.map(
     (b: Record<string, unknown>, i: number) => {
       if (!b.name || typeof b.name !== "string") {
-        throw new AppError(
-          `Beneficiary at index ${i} is missing a valid name.`,
-          ErrorCodes.GEMINI_RESPONSE_INVALID,
-          502,
+        throw new Error(
+          `[willParser] Beneficiary at index ${i} is missing a valid "name".`
         );
       }
       if (!b.assetDescription || typeof b.assetDescription !== "string") {
-        throw new AppError(
-          `Beneficiary "${b.name}" is missing an asset description.`,
-          ErrorCodes.GEMINI_RESPONSE_INVALID,
-          502,
+        throw new Error(
+          `[willParser] Beneficiary "${b.name}" is missing "assetDescription".`
         );
       }
 
@@ -178,8 +188,6 @@ function validateParsedWill(raw: Record<string, unknown>): ParsedWill {
   );
 
   const parsed: ParsedWill = {
-    description:
-      typeof raw.description === "string" ? raw.description : undefined,
     testator_name:
       typeof raw.testator_name === "string" ? raw.testator_name : undefined,
     testator_placeholderId:
@@ -226,15 +234,17 @@ export async function parseWillWithGemini(
   // Step 2: Build prompt
   const fullPrompt = WILL_ANALYSIS_PROMPT + willText;
 
-  // Step 3: Call Gemini via centralized wrapper
+  // Step 3: Call Gemini
   console.log("[willParser] Sending will text to Gemini for analysis...");
-  let responseText: string;
-  try {
-    responseText = await callGemini(GEMINI_MODEL, fullPrompt);
-  } catch (err) {
-    // callGemini already classifies into AppError — re-throw as-is
-    console.error("[willParser] Gemini request failed:", err);
-    throw err;
+  const ai = getGeminiClient();
+  const result = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: fullPrompt,
+  });
+  let responseText = result.text?.trim() ?? "";
+
+  if (!responseText) {
+    throw new Error("[willParser] Gemini returned an empty response.");
   }
 
   // Step 4: Clean and parse JSON
@@ -248,14 +258,9 @@ export async function parseWillWithGemini(
   try {
     rawJson = JSON.parse(responseText);
   } catch {
-    console.error(
-      "[willParser] Failed to parse Gemini response as JSON. Raw response:",
-      responseText.slice(0, 500),
-    );
-    throw new AppError(
-      "Gemini API returned an unexpected response format.\nThis may indicate an upstream API change.",
-      ErrorCodes.GEMINI_RESPONSE_INVALID,
-      502,
+    throw new Error(
+      "[willParser] Failed to parse Gemini response as JSON.\n" +
+        `Raw response:\n${responseText.slice(0, 500)}`
     );
   }
 

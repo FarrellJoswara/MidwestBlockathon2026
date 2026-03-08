@@ -34,13 +34,16 @@ export async function POST(
     );
   }
   try {
+    const allocations = result.will.pools.flatMap((pool) =>
+      pool.beneficiary_wallets.map((w, i) => ({
+        wallet: w,
+        percentage: pool.beneficiary_percentages[i] ?? 0,
+      }))
+    );
     const plan = executeDistribution(
       id,
       result.will.creator_wallet,
-      result.will.beneficiary_wallets.map((w, i) => ({
-        wallet: w,
-        percentage: result.will.beneficiary_percentages[i] ?? 0,
-      }))
+      allocations
     );
     const will = await updateWill(id, { status: "executed" });
     return NextResponse.json({ will, distribution_plan: plan });

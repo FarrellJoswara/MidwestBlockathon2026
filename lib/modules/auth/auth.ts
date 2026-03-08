@@ -17,10 +17,10 @@ export function getRoleForWill(will: Will, wallet: string): WalletRole {
   const w = wallet.toLowerCase();
   if (will.executor_wallet.toLowerCase() === w) return "executor";
   if (will.creator_wallet.toLowerCase() === w) return "creator";
-  if (
-    will.beneficiary_wallets.some((b) => b.toLowerCase() === w)
-  )
-    return "beneficiary";
+  const isBeneficiary = will.pools.some((pool) =>
+    pool.beneficiary_wallets.some((b) => b.toLowerCase() === w)
+  );
+  if (isBeneficiary) return "beneficiary";
   return null;
 }
 

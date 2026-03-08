@@ -32,6 +32,7 @@ export function useDeclareDeath() {
       abi: willRegistryAbi,
       functionName: "declareDeath",
       args: [willId],
+      gas: BigInt(300000),
     });
   };
 

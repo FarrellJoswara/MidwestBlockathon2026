@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { PrivyConnectButton } from "@/components/layout/PrivyConnectButton";
 
 export default function HomePage() {
   const { authenticated } = usePrivy();
@@ -12,32 +11,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen">
-      {/* ── Header ────────────────────────────────────────────── */}
-      <header className="border-b border-ink-200/60 bg-parchment/95">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link
-            href="/"
-            className="flex items-center gap-2.5 text-ink-900"
-          >
-            <span className="text-lg text-wine">◆</span>
-            <span className="font-serif text-lg font-semibold tracking-tight">
-              dihhapp
-            </span>
-          </Link>
-          <div className="flex items-center gap-6">
-            {isConnected && (
-              <Link
-                href="/wills"
-                className="text-sm text-ink-500 transition-colors hover:text-ink-900"
-              >
-                My Wills
-              </Link>
-            )}
-            <PrivyConnectButton />
-          </div>
-        </div>
-      </header>
-
       {/* ── Hero ──────────────────────────────────────────────── */}
       <main className="mx-auto max-w-4xl px-6 py-24 text-center">
         {/* Decorative rule */}
@@ -79,7 +52,7 @@ export default function HomePage() {
               Executor
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-500">
-              Create wills, upload encrypted documents to IPFS, set
+              Create wills, upload documents to IPFS, set
               beneficiaries and allocations, declare death, and execute
               distribution.
             </p>
@@ -98,8 +71,7 @@ export default function HomePage() {
               Secure by Design
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-ink-500">
-              Documents encrypted before IPFS. Only the executor holds
-              full access; keys never stored on our servers.
+              Documents stored on IPFS. Access controlled by role (executor and beneficiaries).
             </p>
           </div>
         </div>
