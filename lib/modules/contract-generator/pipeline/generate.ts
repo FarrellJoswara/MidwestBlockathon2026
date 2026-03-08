@@ -49,6 +49,9 @@ ${JSON.stringify(parserOutput, null, 2)}
 Requirements:
 - Generate a complete, valid Solidity contract that uses this data.
 - Use Solidity 0.8.x.
+- The contract MUST use the exact beneficiary addresses from the "beneficiaries" array (walletAddress for each) and their allocation amounts/percentages. Do not substitute or invent addresses.
+- The contract MUST use the "assets" array: each asset's description, beneficiaryWallet, nftContractAddress, and nftTokenId must be reflected in the contract (e.g. mapping or struct fields).
+- The testator_address and executor_address from the JSON must be the creator and executor in the contract.
 - The contract should support creator, executor, beneficiaries, and will execution lifecycle.
 ${buildDeclareDeathRequirements()}
 - Return ONLY the Solidity source code.

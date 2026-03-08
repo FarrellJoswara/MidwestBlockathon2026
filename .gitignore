@@ -9,6 +9,9 @@ out
 build
 dist
 
+# Pipeline generated .sol logs (optional: remove to track generated contracts)
+lib/modules/contract-generator/pipeline/logs/
+
 # Env (do not commit secrets)
 .env
 .env.local

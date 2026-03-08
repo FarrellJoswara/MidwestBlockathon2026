@@ -16,16 +16,19 @@ import { generateContractFromParserData } from "./generate";
 import { compileContract } from "./compile";
 import { deployGeneratedContract } from "./deploy-generated";
 import { recordDeployedWill } from "../registry";
+import { logGeneratedSol } from "./log-generated-sol";
 
 /**
  * Full pipeline: take parser output, generate contract via Gemini, compile, deploy, and record.
  * Returns the deploy result; optionally records willId → contractAddress when willId is in options.
+ * Each generated .sol is written to lib/modules/contract-generator/pipeline/logs/ for inspection.
  */
 export async function generateAndDeployContract(
   parserOutput: ParserOutput,
   options?: GenerateAndDeployOptions
 ): Promise<DeployResult> {
   const generated = await generateContractFromParserData(parserOutput);
+  logGeneratedSol(generated, parserOutput);
   const compiled = await compileContract(generated);
   const result = await deployGeneratedContract(compiled, options);
 
