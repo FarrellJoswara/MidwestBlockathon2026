@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { validateWillFormParams } from "@/lib/modules/ui";
 import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import type { ParserOutput } from "@/lib/modules/contract-generator/types";
+import type { ParsedWill } from "@/lib/modules/contract-parser/types/will";
 import { type Address } from "viem";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
@@ -22,20 +24,19 @@ export default function CreateWillPage() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const router = useRouter();
-  const [creatorWallet, setCreatorWallet] = useState("");
-  const [beneficiaryNames, setBeneficiaryNames] = useState<string[]>(["", ""]);
-  const [beneficiaries, setBeneficiaries] = useState<string[]>(["", ""]);
-  const [percentages, setPercentages] = useState<number[]>([50, 50]);
-  const [assets, setAssets] = useState<AssetRow[]>([
-    { assetDescription: "", beneficiaryIndex: 0, nftContractAddress: "", nftTokenId: "" },
-  ]);
   const [file, setFile] = useState<File | null>(null);
+  const [analyzed, setAnalyzed] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [beneficiaryNames, setBeneficiaryNames] = useState<string[]>([]);
+  const [beneficiaries, setBeneficiaries] = useState<string[]>([]);
+  const [percentages, setPercentages] = useState<number[]>([]);
+  const [assets, setAssets] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const totalPct = percentages.reduce((s, p) => s + p, 0);
   const validation = validateWillFormParams({
-    creator_wallet: creatorWallet,
+    creator_wallet: address ?? "",
     beneficiary_wallets: beneficiaries,
     beneficiary_percentages: percentages,
   });
@@ -95,13 +96,94 @@ export default function CreateWillPage() {
     setAssets((a) => a.filter((_, j) => j !== i));
   };
 
+  /** Parse percentage from amount string (e.g. "50%" -> 50); else return equal share. */
+  function parsePercentageFromAmount(amount: string | undefined, count: number): number {
+    if (!amount || count <= 0) return 0;
+    const num = parseInt(amount.replace(/[^0-9]/g, ""), 10);
+    if (!Number.isNaN(num) && num >= 0 && num <= 100) return num;
+    return Math.floor(100 / count);
+  }
+
+  const analyzeWill = async () => {
+    if (!file) return;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/wills/parse", { method: "POST", body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? res.statusText);
+      }
+      const parsed: ParsedWill = await res.json();
+      const bens = parsed.beneficiaries ?? [];
+      if (bens.length === 0) {
+        throw new Error("No beneficiaries found in the will. Please check the document.");
+      }
+      const totalPct = bens.reduce(
+        (sum, b) => sum + parsePercentageFromAmount(b.amount, bens.length),
+        0
+      );
+      const pcts =
+        totalPct > 0
+          ? bens.map((b) => parsePercentageFromAmount(b.amount, bens.length))
+          : bens.map(() => Math.floor(100 / bens.length));
+      const remainder = 100 - pcts.reduce((s, p) => s + p, 0);
+      if (remainder !== 0 && pcts.length > 0) pcts[0] += remainder;
+
+      setBeneficiaryNames(bens.map((b) => b.name));
+      setBeneficiaries(bens.map(() => ""));
+      setPercentages(pcts);
+      setAssets(
+        bens.map((b, i) => ({
+          assetDescription: b.assetDescription ?? "",
+          beneficiaryIndex: i,
+          nftContractAddress: "",
+          nftTokenId: "",
+        }))
+      );
+      setAnalyzed(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to analyze will");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  /** Build pipeline ParserOutput from current form state (wallets must already be validated). */
+  function buildParserOutput(
+    wallets: string[],
+    pcts: number[]
+  ): ParserOutput {
+    return {
+      testator_name: null,
+      testator_address: address ?? null,
+      executor_name: null,
+      executor_address: address ?? null,
+      beneficiaries: wallets.map((w, i) => ({
+        name: beneficiaryNames[i]?.trim() ?? "",
+        walletAddress: w.trim() || null,
+        amount: pcts[i] != null ? `${pcts[i]}%` : null,
+      })),
+      assets: assets.map((row) => ({
+        assetDescription: row.assetDescription.trim() || "",
+        beneficiaryWallet: beneficiaries[row.beneficiaryIndex]?.trim() || null,
+        nftContractAddress: row.nftContractAddress?.trim() || null,
+        nftTokenId: row.nftTokenId?.trim() || null,
+      })),
+      conditions: [],
+      additionalInstructions: null,
+    };
+  }
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !valid) return;
     const wallets = beneficiaries.filter((w) => w.trim().length > 0);
     const pcts = percentages.slice(0, wallets.length);
     const check = validateWillFormParams({
-      creator_wallet: creatorWallet,
+      creator_wallet: address ?? "",
       beneficiary_wallets: wallets,
       beneficiary_percentages: pcts,
     });
@@ -113,6 +195,25 @@ export default function CreateWillPage() {
     setLoading(true);
     setError(null);
     try {
+      const parserOutput = buildParserOutput(wallets, pcts);
+
+      // 1. Pipeline: generate contract from form data → compile → deploy
+      const pipelineRes = await fetch("/api/contract/generate-and-deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parserOutput),
+      });
+      if (!pipelineRes.ok) {
+        const errBody = await pipelineRes.json().catch(() => ({}));
+        throw new Error((errBody as { error?: string }).error ?? pipelineRes.statusText);
+      }
+      const pipelineResult = (await pipelineRes.json()) as {
+        contractAddress: string;
+        transactionHash: string;
+        contractName: string;
+      };
+      console.log("Generated will contract deployed:", pipelineResult.contractAddress, pipelineResult.transactionHash);
+
       if (!CONTRACT_ADDRESS) {
         console.warn("Contract address is not defined in environment variables. We will just test the IPFS upload for now.");
       }
@@ -147,7 +248,7 @@ export default function CreateWillPage() {
           abi: willRegistryAbi,
           functionName: "createWill",
           args: [
-            creatorWallet.trim() as Address,
+            address,
             wallets.map((w) => w.trim() as Address),
             pcts.map((p) => BigInt(p)),
             cidStr,
@@ -155,9 +256,20 @@ export default function CreateWillPage() {
           ],
         });
         console.log("Will created with tx hash:", txHash);
+        if (pipelineResult.contractAddress) {
+          console.log("Generated will contract:", pipelineResult.contractAddress);
+        }
         router.push("/wills");
       } else {
-        alert("IPFS Output:\nCID: " + cidStr + "\nIV: " + ivStr + "\n\n(Smart contract not deployed)");
+        alert(
+          "Pipeline deployed contract: " +
+            pipelineResult.contractAddress +
+            "\n\nIPFS Output:\nCID: " +
+            cidStr +
+            "\nIV: " +
+            ivStr +
+            "\n\n(Smart contract not deployed)"
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create will");
@@ -189,33 +301,42 @@ export default function CreateWillPage() {
       <main className="mx-auto max-w-xl px-4 py-10">
         <h1 className="text-2xl font-bold text-ink-900">Create Will</h1>
         <p className="mt-1 text-ink-600">
-          You are creating this will as <strong>executor</strong>. Enter the will
-          creator wallet and beneficiary wallets (e.g. yours and your brother&apos;s). The will itself only lists real-world assets — here you assign the NFT that represents each asset and who receives it.
+          You are creating this will as <strong>executor</strong>. Upload your will
+          document (PDF) and we will analyze it to extract beneficiaries and assets. Then add wallet addresses and NFT details to complete the will.
         </p>
         <form onSubmit={submit} className="mt-8 space-y-6">
           <div>
             <label className="block text-sm font-medium text-ink-700">
-              Will creator wallet address
-            </label>
-            <input
-              type="text"
-              value={creatorWallet}
-              onChange={(e) => setCreatorWallet(e.target.value)}
-              placeholder="0x..."
-              className="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-ink-700">
-              Will document (PDF, optional)
+              Will document (PDF)
             </label>
             <input
               type="file"
               accept=".pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setFile(f);
+                if (!f) setAnalyzed(false);
+              }}
               className="mt-1 w-full text-sm text-ink-600"
             />
+            <p className="mt-1 text-xs text-ink-500">
+              Upload the will PDF first. After analysis, you can add beneficiary wallets and NFT assignments.
+            </p>
           </div>
+
+          {!analyzed ? (
+            <>
+              <button
+                type="button"
+                onClick={analyzeWill}
+                disabled={!file || analyzing}
+                className="w-full rounded-lg bg-ink-900 py-3 text-white disabled:opacity-50 hover:bg-ink-800"
+              >
+                {analyzing ? "Analyzing…" : "Analyze will"}
+              </button>
+            </>
+          ) : (
+            <>
           <div>
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-ink-700">
@@ -357,11 +478,17 @@ export default function CreateWillPage() {
           )}
           <button
             type="submit"
-            disabled={!valid || loading}
+            disabled={!analyzed || !valid || loading}
             className="w-full rounded-lg bg-ink-900 py-3 text-white disabled:opacity-50 hover:bg-ink-800"
           >
             {loading ? "Creating…" : "Create Will"}
           </button>
+            </>
+          )}
+
+          {error && (
+            <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>
+          )}
         </form>
       </main>
     </div>
