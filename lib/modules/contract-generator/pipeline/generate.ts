@@ -14,7 +14,7 @@ import { callGemini } from "@/lib/gemini";
 import { AppError, ErrorCodes } from "@/lib/errors";
 import type { ParserOutput, GeneratedContract } from "../types";
 
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const GEMINI_MODEL = "gemini-3.5-flash-latest";
 
 /**
  * Test: call Gemini with a simple prompt (for verification only).

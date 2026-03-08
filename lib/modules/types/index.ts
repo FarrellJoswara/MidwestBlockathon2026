@@ -8,6 +8,7 @@ export interface Will {
   beneficiary_percentages: number[];
   ipfs_cid: string | null;
   encrypted_doc_key_iv: string | null;
+  generated_contract_address: string | null;
   status: WillStatus;
   created_at: string;
   updated_at: string;

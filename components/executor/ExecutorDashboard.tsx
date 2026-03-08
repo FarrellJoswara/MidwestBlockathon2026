@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/modules/api";
 import { executorApiPaths } from "@/lib/modules/executor";
 import type { Will } from "@/lib/modules/types";
-import { useEffect } from "react";
 import { useDeclareDeath } from "@/lib/modules/contract-generator/hooks/useDeclareDeath";
+import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import { type Address } from "viem";
+
+const CONTRACT_ADDRESS = process.env
+  .NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
 interface ExecutorDashboardProps {
   will: Will;
@@ -19,6 +23,7 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
   const queryClient = useQueryClient();
   const [declareConfirm, setDeclareConfirm] = useState(false);
   const [distributeConfirm, setDistributeConfirm] = useState(false);
+  const { writeContractAsync, isPending: isExecutePending, error: executeError } = useWriteContract();
 
   const {
     declareDeath: declareDeathOnChain,
@@ -45,17 +50,21 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
     },
   });
 
-  const distribute = useMutation({
-    mutationFn: () =>
-      apiFetch(executorApiPaths.distribute(will.id), {
-        method: "POST",
-        wallet: address ?? undefined,
-      }),
-    onSuccess: () => {
+  const executeDistribution = async () => {
+    if (!CONTRACT_ADDRESS || !will) return;
+    try {
+      await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: willRegistryAbi,
+        functionName: "markExecuted",
+        args: [BigInt(will.id)],
+      });
       queryClient.invalidateQueries({ queryKey: ["will", will.id, address] });
       setDistributeConfirm(false);
-    },
-  });
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     if (isSuccess && declareDeathHash && !declareDeathSync.isPending) {
@@ -246,11 +255,11 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={() => distribute.mutate()}
-                disabled={distribute.isPending}
+                onClick={executeDistribution}
+                disabled={isExecutePending}
                 className="btn-primary disabled:opacity-50"
               >
-                {distribute.isPending ? "Processing…" : "Confirm"}
+                {isExecutePending ? "Processing…" : "Confirm"}
               </button>
               <button
                 type="button"
@@ -260,6 +269,13 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
                 Cancel
               </button>
             </div>
+          )}
+          {executeError && (
+            <p className="mt-3 text-sm text-wine">
+              {executeError instanceof Error
+                ? executeError.message
+                : "Failed to execute distribution"}
+            </p>
           )}
         </section>
       )}

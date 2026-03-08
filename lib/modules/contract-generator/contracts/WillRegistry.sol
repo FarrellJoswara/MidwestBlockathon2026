@@ -17,6 +17,7 @@ contract WillRegistry {
         uint256[] beneficiaryPercentages;
         string ipfsCid;
         string encryptedDocKeyIv;
+        address generatedContractAddress;
         Status status;
         uint256 createdAt;
         uint256 updatedAt;
@@ -36,7 +37,8 @@ contract WillRegistry {
         address[] calldata beneficiaryWallets,
         uint256[] calldata beneficiaryPercentages,
         string calldata ipfsCid,
-        string calldata encryptedDocKeyIv
+        string calldata encryptedDocKeyIv,
+        address generatedContractAddress
     ) external returns (uint256 id) {
         require(msg.sender != address(0), "invalid executor");
         require(creatorWallet != address(0), "invalid creator");
@@ -61,6 +63,7 @@ contract WillRegistry {
             beneficiaryPercentages: beneficiaryPercentages,
             ipfsCid: ipfsCid,
             encryptedDocKeyIv: encryptedDocKeyIv,
+            generatedContractAddress: generatedContractAddress,
             status: Status.Active,
             createdAt: block.timestamp,
             updatedAt: block.timestamp
@@ -141,6 +144,7 @@ contract WillRegistry {
             uint256[] memory beneficiaryPercentages,
             string memory ipfsCid,
             string memory encryptedDocKeyIv,
+            address generatedContractAddress,
             Status status,
             uint256 createdAt,
             uint256 updatedAt
@@ -156,6 +160,7 @@ contract WillRegistry {
             w.beneficiaryPercentages,
             w.ipfsCid,
             w.encryptedDocKeyIv,
+            w.generatedContractAddress,
             w.status,
             w.createdAt,
             w.updatedAt

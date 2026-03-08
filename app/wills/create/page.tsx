@@ -294,20 +294,11 @@ export default function CreateWillPage() {
             pcts.map((p) => BigInt(p)),
             cidStr,
             ivStr,
+            (pipelineResult.contractAddress || "0x0000000000000000000000000000000000000000") as Address,
           ],
         });
         console.log("Will created with tx hash:", txHash);
         router.push("/wills");
-      } else {
-        alert(
-          "Pipeline deployed contract: " +
-            pipelineResult.contractAddress +
-            "\n\nIPFS Output:\nCID: " +
-            cidStr +
-            "\nIV: " +
-            ivStr +
-            "\n\n(Smart contract not deployed)"
-        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create will");
