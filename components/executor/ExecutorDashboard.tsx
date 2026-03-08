@@ -64,8 +64,11 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
   }, [isSuccess, declareDeathHash, declareDeathSync]);
 
   const downloadDoc = () => {
-    if (!will.ipfs_cid || !will.encrypted_doc_key_iv || !address) return;
-    const url = `/api/ipfs/${encodeURIComponent(will.ipfs_cid)}?will_id=${encodeURIComponent(will.id)}&iv=${encodeURIComponent(will.encrypted_doc_key_iv)}`;
+    if (!will.ipfs_cid || !address) return;
+    const ivParam = will.encrypted_doc_key_iv
+      ? `&iv=${encodeURIComponent(will.encrypted_doc_key_iv)}`
+      : "";
+    const url = `/api/ipfs/${encodeURIComponent(will.ipfs_cid)}?will_id=${encodeURIComponent(will.id)}${ivParam}`;
     const a = document.createElement("a");
     a.href = url;
     a.setAttribute("download", "will-document.pdf");
@@ -134,7 +137,7 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
         </h2>
         {will.ipfs_cid ? (
           <div className="mt-4 flex items-center gap-4">
-            <p className="text-sm text-ink-500">Stored on IPFS (encrypted)</p>
+            <p className="text-sm text-ink-500">Stored on IPFS</p>
             <button type="button" onClick={downloadDoc} className="btn-outlined text-xs">
               Download PDF
             </button>

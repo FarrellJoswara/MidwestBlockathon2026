@@ -88,6 +88,7 @@ export default function EditWillPage() {
           data.will.encrypted_doc_key_iv ?? "",
           0,
         ],
+        gas: BigInt(300000),
       });
       queryClient.invalidateQueries({ queryKey: ["will", id, address] });
       router.push(`/wills/${id}`);
@@ -130,18 +131,14 @@ export default function EditWillPage() {
 
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="border-b border-ink-200/60 bg-parchment/95">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link
-            href={`/wills/${id}`}
-            className="text-sm text-ink-500 transition-colors hover:text-ink-900"
-          >
-            ← Will
-          </Link>
-        </div>
-      </header>
       <main className="mx-auto max-w-xl px-6 py-12">
-        <h1 className="font-serif text-2xl font-bold text-ink-950">
+        <Link
+          href={`/wills/${id}`}
+          className="text-sm text-ink-500 transition-colors hover:text-ink-900"
+        >
+          ← Will
+        </Link>
+        <h1 className="mt-6 font-serif text-2xl font-bold text-ink-950">
           Edit Beneficiaries
         </h1>
         <p className="mt-1 text-sm text-ink-500">

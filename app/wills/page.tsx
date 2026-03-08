@@ -35,52 +35,31 @@ export default function WillsListPage() {
 
   if (!isConnected || !address) {
     return (
-      <div className="min-h-screen bg-parchment">
-        <header className="border-b border-ink-200/60 bg-parchment/95">
-          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-            <Link href="/" className="flex items-center gap-2.5 text-ink-900">
-              <span className="text-lg text-wine">◆</span>
-              <span className="font-serif text-lg font-semibold tracking-tight">
-                dihhapp
-              </span>
-            </Link>
-          </div>
-        </header>
-        <main className="mx-auto max-w-2xl px-6 py-24 text-center">
-          <p className="text-ink-500">
-            Connect your wallet to view your wills.
-          </p>
-          <div className="mt-6 flex justify-center gap-4">
-            <PrivyConnectButton />
-            <Link href="/" className="btn-outlined">
-              ← Back home
-            </Link>
-          </div>
-        </main>
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-500">
+          Connect your wallet to view your wills.
+        </p>
+        <div className="mt-6 flex justify-center gap-4">
+          <PrivyConnectButton />
+          <Link href="/" className="btn-outlined">
+            ← Back home
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="sticky top-0 z-50 border-b border-ink-200/60 bg-parchment/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2.5 text-ink-900">
-            <span className="text-lg text-wine">◆</span>
-            <span className="font-serif text-lg font-semibold tracking-tight">
-              dihhapp
-            </span>
-          </Link>
+      <main className="mx-auto max-w-3xl px-6 py-12">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="font-serif text-2xl font-bold text-ink-950">
+            My Wills
+          </h1>
           <Link href="/wills/create" className="btn-wine">
             Create Will
           </Link>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="font-serif text-2xl font-bold text-ink-950">
-          My Wills
-        </h1>
 
         {isLoading && (
           <p className="mt-6 text-sm text-ink-400">Loading…</p>

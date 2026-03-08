@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract, useDeployContract, usePublicClient, useChainId, useSwitchChain } from "wagmi";
+import { useAccount, useWriteContract, useDeployContract, usePublicClient, useChainId, useSwitchChain, useWalletClient } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { validateWillFormParams } from "@/lib/modules/ui";
@@ -11,10 +11,50 @@ import { generateContractFromParserDataClient } from "@/lib/modules/contract-gen
 import { compileContractClient } from "@/lib/modules/contract-generator/client-compile";
 import type { ParserOutput } from "@/lib/modules/contract-generator/types";
 import type { ParsedWill } from "@/lib/modules/contract-parser/types/will";
-import { type Address } from "viem";
+import { type Address, decodeErrorResult } from "viem";
 
 const CONTRACT_ADDRESS = process.env
   .NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
+
+/** Standard Solidity Error(string) for require(msg) reverts */
+const ERROR_STRING_ABI = [
+  { type: "error" as const, name: "Error", inputs: [{ name: "message", type: "string" }] },
+] as const;
+
+/** Extract contract revert reason from viem/wagmi errors for display. */
+function getRevertReason(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as Record<string, unknown>;
+  if (e.reason && typeof e.reason === "string") return e.reason;
+  if (e.shortMessage && typeof e.shortMessage === "string") {
+    const sm = (e.shortMessage as string);
+    if (!sm.toLowerCase().includes("unknown reason")) return sm;
+  }
+  if (e.message && typeof e.message === "string") return e.message;
+  const cause = e.cause as unknown;
+  if (cause && typeof cause === "object" && "reason" in cause && typeof (cause as { reason: unknown }).reason === "string") {
+    return (cause as { reason: string }).reason;
+  }
+  if (cause && typeof cause === "object" && "shortMessage" in cause && typeof (cause as { shortMessage: unknown }).shortMessage === "string") {
+    return (cause as { shortMessage: string }).shortMessage;
+  }
+  // Try to decode raw revert data (Error(string) from require)
+  let needle: unknown = err;
+  while (needle && typeof needle === "object") {
+    const o = needle as Record<string, unknown>;
+    const data = o.data ?? o.raw;
+    if (data && typeof data === "string" && data.startsWith("0x")) {
+      try {
+        const decoded = decodeErrorResult({ data: data as `0x${string}`, abi: ERROR_STRING_ABI });
+        if (decoded.errorName === "Error" && decoded.args?.[0] && typeof decoded.args[0] === "string") return decoded.args[0];
+      } catch {
+        // not Error(string), skip
+      }
+    }
+    needle = (needle as { cause?: unknown }).cause;
+  }
+  return null;
+}
 
 /** One asset row: description + beneficiary + NFT equivalent. */
 interface AssetRow {
@@ -31,6 +71,7 @@ export default function CreateWillPage() {
   const publicClient = usePublicClient();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
@@ -41,6 +82,13 @@ export default function CreateWillPage() {
   const [assets, setAssets] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** After successful WillRegistry.createWill: show tx hash + links before redirect. */
+  const [successResult, setSuccessResult] = useState<{
+    registryTxHash: string;
+    deploymentTxHash?: string;
+    contractAddress?: string;
+    explorerUrl: string;
+  } | null>(null);
 
   const totalPct = percentages.reduce((s, p) => s + p, 0);
   const validation = validateWillFormParams({
@@ -240,28 +288,68 @@ export default function CreateWillPage() {
       console.log("[CreateWill] Step 3b OK: Got bytecode/abi, deploying with your wallet (Privy)...");
 
       const xrplTestnetId = xrplEvmTestnet.id;
-      if (chainId !== xrplTestnetId && switchChainAsync) {
-        try {
-          await switchChainAsync({ chainId: xrplTestnetId });
-        } catch (err) {
-          throw new Error(
-            "Please switch to XRPL EVM Testnet in your wallet to deploy. Current chain is not supported."
-          );
-        }
-      }
+      const chainIdHex = `0x${xrplTestnetId.toString(16)}`;
 
-      const txHash = await deployContractAsync({
+      const ensureXrplTestnet = async () => {
+        if (chainId === xrplTestnetId) return;
+        const provider = walletClient?.request ? walletClient : null;
+        if (provider?.request) {
+          try {
+            await (provider as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }).request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: chainIdHex }],
+            });
+            return;
+          } catch (err: unknown) {
+            const code = (err as { code?: number }).code;
+            if (code === 4902) {
+              await (provider as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }).request({
+                method: "wallet_addEthereumChain",
+                params: [
+                  {
+                    chainId: chainIdHex,
+                    chainName: xrplEvmTestnet.name,
+                    nativeCurrency: xrplEvmTestnet.nativeCurrency,
+                    rpcUrls: [xrplEvmTestnet.rpcUrls.default.http[0]],
+                    blockExplorerUrls: xrplEvmTestnet.blockExplorers?.default?.url
+                      ? [xrplEvmTestnet.blockExplorers.default.url]
+                      : undefined,
+                  },
+                ],
+              });
+              await (provider as { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> }).request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: chainIdHex }],
+              });
+              return;
+            }
+            throw err;
+          }
+        }
+        if (switchChainAsync) {
+          await switchChainAsync({ chainId: xrplTestnetId });
+          return;
+        }
+        throw new Error(
+          "Please switch your wallet to XRPL EVM Testnet (Chain ID 1449000) before deploying. " +
+            "Add the network in your wallet if needed: RPC https://rpc.testnet.xrplevm.org"
+        );
+      };
+
+      await ensureXrplTestnet();
+
+      const txHashDeploy = await deployContractAsync({
         abi: compiled.abi,
         bytecode: compiled.bytecode as `0x${string}`,
         chainId: xrplTestnetId,
       });
-      if (!txHash) {
+      if (!txHashDeploy) {
         throw new Error("Deployment did not return a transaction hash.");
       }
       if (!publicClient) {
         throw new Error("Cannot wait for receipt: public client not available.");
       }
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHashDeploy });
       const contractAddress = receipt.contractAddress;
       if (!contractAddress) {
         throw new Error("Deployment receipt did not contain a contract address.");
@@ -272,10 +360,10 @@ export default function CreateWillPage() {
           : xrplEvmTestnet.blockExplorers?.default.url;
       const explorerUrl = explorerBase ?? "https://explorer.testnet.xrplevm.org";
       const contractUrl = `${explorerUrl}/address/${contractAddress}`;
-      const txUrl = `${explorerUrl}/tx/${txHash}`;
+      const txDeployUrl = `${explorerUrl}/tx/${txHashDeploy}`;
       console.log("[CreateWill] Step 4: Deployed with your wallet", {
         contractAddress,
-        transactionHash: txHash,
+        transactionHash: txHashDeploy,
         contractName: compiled.contractName,
       });
       console.log(
@@ -284,7 +372,7 @@ export default function CreateWillPage() {
       );
       console.log(
         "[CreateWill] View transaction (click to open):",
-        txUrl
+        txDeployUrl
       );
 
       if (!CONTRACT_ADDRESS) {
@@ -312,50 +400,215 @@ export default function CreateWillPage() {
             "Document upload failed: " + (err.error || uploadRes.statusText)
           );
         }
-        const { cid, iv } = await uploadRes.json();
+        const { cid } = await uploadRes.json();
         cidStr = cid;
-        ivStr = iv;
-        console.log("[CreateWill] Step 5 OK: IPFS", { cid, iv });
+        console.log("[CreateWill] Step 5 OK: IPFS", { cid });
       } else {
         console.log("[CreateWill] Step 5: No file, skipping IPFS");
       }
 
       if (CONTRACT_ADDRESS) {
         console.log("[CreateWill] Step 6: Calling WillRegistry.createWill...");
-        const txHash = await writeContractAsync({
+        // Mirror contract requires: avoid "unknown reason" by validating here and normalizing percentages.
+        if (!address || address === "0x0000000000000000000000000000000000000000") {
+          setError("Creator wallet is required.");
+          setLoading(false);
+          return;
+        }
+        if (wallets.length === 0) {
+          setError("At least one beneficiary wallet is required (pool empty).");
+          setLoading(false);
+          return;
+        }
+        const pctInts = pcts.map((p) => Math.max(0, Math.round(Number(p))));
+        if (pctInts.length !== wallets.length) {
+          setError("Beneficiary and percentage count must match.");
+          setLoading(false);
+          return;
+        }
+        let sum = pctInts.reduce((s, n) => s + n, 0);
+        if (sum !== 100 && pctInts.length > 0) {
+          const diff = 100 - sum;
+          if (diff > 0) {
+            pctInts[0] = pctInts[0] + diff;
+          } else {
+            // sum > 100: reduce first entry (keep non-negative)
+            let d = -diff;
+            for (let i = 0; i < pctInts.length && d > 0; i++) {
+              const take = Math.min(pctInts[i], d);
+              pctInts[i] -= take;
+              d -= take;
+            }
+          }
+        }
+        sum = pctInts.reduce((s, n) => s + n, 0);
+        if (sum !== 100) {
+          setError("Percentages must total exactly 100% (got " + sum + " after rounding). Adjust the shares and try again.");
+          setLoading(false);
+          return;
+        }
+        const poolPctBigInt = pctInts.map((p) => {
+          if (p < 0 || p > 100) {
+            throw new Error("Invalid percentage: " + p);
+          }
+          return BigInt(p);
+        });
+        const createWillArgs = [
+          address,
+          ["Allocation"],
+          [wallets.map((w) => w.trim() as Address)],
+          [poolPctBigInt],
+          cidStr,
+          ivStr,
+        ] as const;
+        // Simulate first to surface revert (RPC may not return reason string)
+        if (publicClient && address) {
+          try {
+            await publicClient.simulateContract({
+              account: address,
+              address: CONTRACT_ADDRESS,
+              abi: willRegistryAbi,
+              functionName: "createWill",
+              args: createWillArgs,
+            });
+          } catch (simErr) {
+            const reason = getRevertReason(simErr);
+            console.error("[CreateWill] Simulation failed:", reason || simErr, simErr);
+            // Log raw revert data if present (helps debug when RPC doesn't decode)
+            const errObj = simErr as Record<string, unknown>;
+            if (errObj?.cause && typeof errObj.cause === "object" && errObj.cause !== null && "data" in errObj.cause) {
+              console.error("[CreateWill] Revert data:", (errObj.cause as { data?: unknown }).data);
+            }
+            if (reason && !reason.toLowerCase().includes("unknown")) {
+              setError("Contract would revert: " + reason);
+            } else {
+              setError(
+                "Transaction would revert on chain. Check: (1) Percentages total exactly 100%, (2) At least one beneficiary, (3) All addresses are valid 0x40-char hex."
+              );
+            }
+            setLoading(false);
+            return;
+          }
+        }
+        const registryTxHash = await writeContractAsync({
           address: CONTRACT_ADDRESS,
           abi: willRegistryAbi,
           functionName: "createWill",
-          args: [
-            address,
-            ["Allocation"],
-            [wallets.map((w) => w.trim() as Address)],
-            [pcts.map((p) => BigInt(p))],
-            cidStr,
-            ivStr,
-          ],
+          args: createWillArgs,
+          gas: BigInt(300000),
         });
-        console.log("[CreateWill] Step 7: Will created, redirecting to /wills", { txHash });
-        router.push("/wills");
+        console.log("[CreateWill] Step 7: Will created on registry", { registryTxHash });
+        setSuccessResult({
+          registryTxHash,
+          deploymentTxHash: txHashDeploy,
+          contractAddress,
+          explorerUrl,
+        });
+        // User can click "View my wills" or we redirect after a short delay
       } else {
         console.log("[CreateWill] Step 6/7: No registry — showing alert only");
         alert(
           "Will contract deployed with your wallet: " +
             contractAddress +
-            "\n\nIPFS Output:\nCID: " +
+            "\n\nIPFS CID: " +
             cidStr +
-            "\nIV: " +
-            ivStr +
             "\n\n(WillRegistry not configured; contract address not recorded on-chain.)"
         );
       }
     } catch (err) {
-      console.error("[CreateWill] Error:", err instanceof Error ? err.message : err);
-      setError(err instanceof Error ? err.message : "Failed to create will");
+      const msg = err instanceof Error ? err.message : String(err);
+      const reason = getRevertReason(err);
+      console.error("[CreateWill] Error:", msg, reason ?? "", err);
+      if (reason) {
+        setError(`Transaction failed: ${reason}`);
+      } else if (msg.includes("Transaction failed") || msg.includes("revert") || msg.includes("execution reverted")) {
+        setError(
+          "Transaction was rejected by the chain. Ensure beneficiary percentages total exactly 100% and addresses are valid, then try again."
+        );
+      } else {
+        setError(msg || "Failed to create will");
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  /* ── Success: show tx hash and links ──────────────────────── */
+  if (successResult) {
+    const { registryTxHash, deploymentTxHash, contractAddress, explorerUrl } = successResult;
+    return (
+      <div className="min-h-screen bg-parchment">
+        <main className="mx-auto max-w-xl px-6 py-12">
+          <div className="card space-y-4 !p-6">
+            <h2 className="font-serif text-xl font-bold text-ink-950">
+              Will registered on chain
+            </h2>
+            <p className="text-sm text-ink-600">
+              Your will has been uploaded to the Will Registry. You can view the transaction and contract below.
+            </p>
+            <div className="space-y-3 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                Registry transaction
+              </p>
+              <p className="font-mono text-sm break-all text-ink-800">{registryTxHash}</p>
+              <a
+                href={`${explorerUrl}/tx/${registryTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-wine hover:underline"
+              >
+                View on block explorer →
+              </a>
+            </div>
+            {contractAddress && (
+              <div className="space-y-2 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                  Will contract address
+                </p>
+                <p className="font-mono text-sm break-all text-ink-800">{contractAddress}</p>
+                <a
+                  href={`${explorerUrl}/address/${contractAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-wine hover:underline"
+                >
+                  View on block explorer →
+                </a>
+              </div>
+            )}
+            {deploymentTxHash && (
+              <div className="space-y-2 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                  Deployment transaction
+                </p>
+                <p className="font-mono text-sm break-all text-ink-800">{deploymentTxHash}</p>
+                <a
+                  href={`${explorerUrl}/tx/${deploymentTxHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-wine hover:underline"
+                >
+                  View on block explorer →
+                </a>
+              </div>
+            )}
+            <div className="flex gap-3 pt-2">
+              <Link href="/wills" className="btn-wine flex-1 py-2.5 text-center">
+                View my wills
+              </Link>
+              <button
+                type="button"
+                onClick={() => setSuccessResult(null)}
+                className="btn-outlined py-2.5"
+              >
+                Create another
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   /* ── Guard: not connected ─────────────────────────────────── */
 
@@ -376,19 +629,14 @@ export default function CreateWillPage() {
 
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="border-b border-ink-200/60 bg-parchment/95">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link
-            href="/wills"
-            className="text-sm text-ink-500 transition-colors hover:text-ink-900"
-          >
-            ← Wills
-          </Link>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-xl px-6 py-12">
-        <h1 className="font-serif text-2xl font-bold text-ink-950">
+        <Link
+          href="/wills"
+          className="text-sm text-ink-500 transition-colors hover:text-ink-900"
+        >
+          ← Wills
+        </Link>
+        <h1 className="mt-6 font-serif text-2xl font-bold text-ink-950">
           Create Will
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-ink-500">

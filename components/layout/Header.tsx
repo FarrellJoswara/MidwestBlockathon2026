@@ -23,6 +23,12 @@ export default function Header() {
           >
             My Wills
           </Link>
+          <Link
+            href="/wills/create"
+            className="text-sm text-ink-500 transition-colors hover:text-ink-900"
+          >
+            Create Will
+          </Link>
           <PrivyConnectButton />
         </nav>
       </div>

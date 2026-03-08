@@ -16,10 +16,10 @@ export async function GET(
   }
   const { cid } = await params;
   const willId = req.nextUrl.searchParams.get("will_id");
-  const iv = req.nextUrl.searchParams.get("iv");
-  if (!willId || !iv) {
+  const iv = req.nextUrl.searchParams.get("iv") ?? "";
+  if (!willId) {
     return NextResponse.json(
-      { error: "Query params will_id and iv required" },
+      { error: "Query param will_id required" },
       { status: 400 }
     );
   }
@@ -31,7 +31,8 @@ export async function GET(
   if (!role || role === null) {
     return NextResponse.json({ error: "Access denied to this will document" }, { status: 403 });
   }
-  if (will.ipfs_cid !== cid || will.encrypted_doc_key_iv !== iv) {
+  const willIv = will.encrypted_doc_key_iv ?? "";
+  if (will.ipfs_cid !== cid || willIv !== iv) {
     return NextResponse.json(
       { error: "CID or IV does not match will record" },
       { status: 400 }
@@ -45,15 +46,19 @@ export async function GET(
       { status: 502 }
     );
   }
-  const encrypted = Buffer.from(await res.arrayBuffer());
-  let decrypted: Buffer;
-  try {
-    decrypted = decryptBuffer(encrypted, iv);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Decryption failed" }, { status: 500 });
+  const raw = Buffer.from(await res.arrayBuffer());
+  let body: Buffer;
+  if (iv && iv.length > 0) {
+    try {
+      body = decryptBuffer(raw, iv);
+    } catch (e) {
+      console.error(e);
+      return NextResponse.json({ error: "Decryption failed" }, { status: 500 });
+    }
+  } else {
+    body = raw;
   }
-  return new NextResponse(new Uint8Array(decrypted), {
+  return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": 'attachment; filename="will-document.pdf"',
