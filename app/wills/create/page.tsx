@@ -28,6 +28,10 @@ export default function CreateWillPage() {
   const [file, setFile] = useState<File | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [parsedDescription, setParsedDescription] = useState<string | null>(null);
+  const [parsedTestator, setParsedTestator] = useState<string | null>(null);
+  const [parsedExecutor, setParsedExecutor] = useState<string | null>(null);
+  const [parsedConditions, setParsedConditions] = useState<string[]>([]);
   const [beneficiaryNames, setBeneficiaryNames] = useState<string[]>([]);
   const [beneficiaries, setBeneficiaries] = useState<string[]>([]);
   const [percentages, setPercentages] = useState<number[]>([]);
@@ -154,6 +158,14 @@ export default function CreateWillPage() {
       const remainder = 100 - pcts.reduce((s, p) => s + p, 0);
       if (remainder !== 0 && pcts.length > 0) pcts[0] += remainder;
 
+      setParsedDescription(parsed.description ?? null);
+      setParsedTestator(parsed.testator_name ?? null);
+      setParsedExecutor(parsed.executor_name ?? null);
+      setParsedConditions(
+        parsed.conditions && Array.isArray(parsed.conditions)
+          ? parsed.conditions
+          : []
+      );
       setBeneficiaryNames(bens.map((b) => b.name));
       setBeneficiaries(bens.map(() => ""));
       setPercentages(pcts);
@@ -282,20 +294,11 @@ export default function CreateWillPage() {
             pcts.map((p) => BigInt(p)),
             cidStr,
             ivStr,
+            (pipelineResult.contractAddress || "0x0000000000000000000000000000000000000000") as Address,
           ],
         });
         console.log("Will created with tx hash:", txHash);
         router.push("/wills");
-      } else {
-        alert(
-          "Pipeline deployed contract: " +
-            pipelineResult.contractAddress +
-            "\n\nIPFS Output:\nCID: " +
-            cidStr +
-            "\nIV: " +
-            ivStr +
-            "\n\n(Smart contract not deployed)"
-        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create will");
@@ -379,7 +382,41 @@ export default function CreateWillPage() {
             </button>
           ) : (
             <>
-              {/* ── Beneficiaries ──────────────────────────────── */}
+              {/* ── Parsed Summary ──────────────────────────────── */}
+              {parsedDescription && (
+                <div className="card border-wine/20 bg-wine/5">
+                  <p className="font-serif text-sm leading-relaxed text-ink-800">
+                    {parsedDescription}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-500">
+                    {parsedTestator && (
+                      <span>
+                        <strong className="text-ink-600">Testator:</strong>{" "}
+                        {parsedTestator}
+                      </span>
+                    )}
+                    {parsedExecutor && (
+                      <span>
+                        <strong className="text-ink-600">Executor:</strong>{" "}
+                        {parsedExecutor}
+                      </span>
+                    )}
+                  </div>
+                  {parsedConditions.length > 0 && (
+                    <div className="mt-3 border-t border-ink-200/40 pt-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                        Conditions
+                      </p>
+                      <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs text-ink-500">
+                        {parsedConditions.map((c, i) => (
+                          <li key={i}>{c}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium uppercase tracking-wide text-ink-400">

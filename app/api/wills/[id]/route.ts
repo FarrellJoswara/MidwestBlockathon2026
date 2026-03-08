@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
+import { errorResponse } from "@/lib/api-helpers";
+import { ErrorCodes } from "@/lib/errors";
 
 export async function GET(
   req: NextRequest,
@@ -7,15 +9,20 @@ export async function GET(
 ) {
   const wallet = getWalletFromRequest(req);
   if (!wallet) {
-    return NextResponse.json(
-      { error: "Missing or invalid x-wallet-address header" },
-      { status: 401 }
+    return errorResponse(
+      "Missing or invalid x-wallet-address header",
+      ErrorCodes.UNAUTHORIZED,
+      401,
     );
   }
   const { id } = await params;
   const result = await getWillWithRole(id, wallet);
   if (!result) {
-    return NextResponse.json({ error: "Will not found or access denied" }, { status: 404 });
+    return errorResponse(
+      "Will not found or access denied",
+      ErrorCodes.NOT_FOUND,
+      404,
+    );
   }
   return NextResponse.json(result);
 }

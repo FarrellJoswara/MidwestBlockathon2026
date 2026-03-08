@@ -1,35 +1,27 @@
 /**
- * Generate Solidity contract source from parser output via Gemini (or template).
- * Foundation only — implement Gemini API call and prompt to produce contract source.
+ * Generate Solidity contract source from parser output via Gemini.
  *
  * Inputs:
- *   - generateContractFromParserData(parserOutput): ParserOutput (raw/semi-structured from parser)
- *   - testGemini(): none (uses env GOOGLE_API_KEY or GEMINI_API_KEY)
+ *   - generateContractFromParserData(parserOutput): ParserOutput
+ *   - testGemini(): none — uses centralized Gemini wrapper
  *
  * Outputs:
  *   - generateContractFromParserData(): GeneratedContract { source, contractName }
  *   - testGemini(): string (model response)
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini";
+import { AppError, ErrorCodes } from "@/lib/errors";
 import type { ParserOutput, GeneratedContract } from "../types";
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY,
-});
+const GEMINI_MODEL = "gemini-3.5-flash-latest";
 
 /**
  * Test: call Gemini with a simple prompt (for verification only).
  * Returns the model's text response.
  */
 export async function testGemini(): Promise<string> {
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: "",
-  });
-  return response.text ?? "";
+  return callGemini(GEMINI_MODEL, "");
 }
 
 /**
@@ -42,9 +34,9 @@ export async function generateContractFromParserData(
   const prompt = `You are a Solidity contract generator. Use the following JSON data to generate a valid Solidity smart contract for a will/estate system.
 
   Data (JSON):
-\`\`\`json
+---JSON---
 ${JSON.stringify(parserOutput, null, 2)}
-\`\`\`
+---END JSON---
 
 Requirements:
 - Generate a complete, valid Solidity contract that uses this data.
@@ -57,17 +49,15 @@ ${buildDeclareDeathRequirements()}
 - Return ONLY the Solidity source code.
 - No markdown.
 - No explanation.
-- No \`\`\`solidity wrapper.
+- No markdown code blocks.
 - Just the raw .sol file contents.`;
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-  });
-
-  const raw = response.text?.trim() ?? "";
-  if (!raw) {
-    throw new Error("Gemini returned empty response");
+  let raw: string;
+  try {
+    raw = await callGemini(GEMINI_MODEL, prompt);
+  } catch (err) {
+    console.error("[generate] Gemini contract generation failed:", err);
+    throw err;
   }
 
   const source = extractSoliditySource(raw);
@@ -79,8 +69,20 @@ ${buildDeclareDeathRequirements()}
 
 /** Strip markdown code fence if present and return raw Solidity source. */
 function extractSoliditySource(raw: string): string {
-  const fenceMatch = raw.match(/```(?:solidity)?\s*([\s\S]*?)```/);
-  if (fenceMatch) return fenceMatch[1].trim();
+  const startIdx = raw.indexOf("```solidity");
+  if (startIdx !== -1) {
+    const endIdx = raw.indexOf("```", startIdx + 11);
+    if (endIdx !== -1) {
+      return raw.slice(startIdx + 11, endIdx).trim();
+    }
+  }
+  const genericStartIdx = raw.indexOf("```");
+  if (genericStartIdx !== -1) {
+    const genericEndIdx = raw.indexOf("```", genericStartIdx + 3);
+    if (genericEndIdx !== -1) {
+      return raw.slice(genericStartIdx + 3, genericEndIdx).trim();
+    }
+  }
   return raw.trim();
 }
 
@@ -127,14 +129,26 @@ function validateDeclareDeathSupport(source: string): void {
     /(enum\s+\w+\s*\{[\s\S]*Active[\s\S]*DeathDeclared[\s\S]*Executed[\s\S]*\})|status/.test(source);
 
   if (!hasFunction) {
-    throw new Error("Generated contract is missing required function: declareDeath(uint256 willId) external");
+    throw new AppError(
+      "Generated contract is missing required function: declareDeath(uint256 willId) external",
+      ErrorCodes.GEMINI_RESPONSE_INVALID,
+      502,
+    );
   }
 
   if (!hasEvent) {
-    throw new Error("Generated contract is missing required DeathDeclared event");
+    throw new AppError(
+      "Generated contract is missing required DeathDeclared event",
+      ErrorCodes.GEMINI_RESPONSE_INVALID,
+      502,
+    );
   }
 
   if (!hasStatusKeyword) {
-    throw new Error("Generated contract is missing a recognizable will status system including DeathDeclared");
+    throw new AppError(
+      "Generated contract is missing a recognizable will status system including DeathDeclared",
+      ErrorCodes.GEMINI_RESPONSE_INVALID,
+      502,
+    );
   }
 }

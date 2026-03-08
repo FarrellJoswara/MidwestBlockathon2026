@@ -3,10 +3,15 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAccount } from "wagmi";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAccount, useWriteContract } from "wagmi";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/modules/api";
+import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import { type Address } from "viem";
 import type { Will } from "@/lib/modules/types";
+
+const CONTRACT_ADDRESS = process.env
+  .NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
 export default function EditWillPage() {
   const params = useParams();
@@ -14,6 +19,7 @@ export default function EditWillPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
   const queryClient = useQueryClient();
+  const { writeContractAsync, isPending: isWritePending, error: writeError } = useWriteContract();
   const [beneficiaries, setBeneficiaries] = useState<string[]>([]);
   const [percentages, setPercentages] = useState<number[]>([]);
 
@@ -34,30 +40,31 @@ export default function EditWillPage() {
     }
   }, [data?.will]);
 
-  const updateMutation = useMutation({
-    mutationFn: (body: { beneficiary_wallets: string[]; beneficiary_percentages: number[] }) =>
-      apiFetch(`/api/wills/${id}/update`, {
-        method: "PATCH",
-        wallet: address ?? undefined,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    onSuccess: () => {
+  const totalPct = percentages.reduce((s, p) => s + p, 0);
+  const valid = Math.abs(totalPct - 100) < 0.01 && CONTRACT_ADDRESS !== undefined;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid || !data?.will) return;
+    try {
+      await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: willRegistryAbi,
+        functionName: "updateWill",
+        args: [
+          BigInt(id),
+          beneficiaries.map((w) => w.trim() as Address),
+          percentages.map((p) => BigInt(Math.floor(p))),
+          "", // ipfsCid empty skips update
+          "", // encryptedDocKeyIv empty skips update
+          0, // Status.Active to skip status update
+        ],
+      });
       queryClient.invalidateQueries({ queryKey: ["will", id, address] });
       router.push(`/wills/${id}`);
-    },
-  });
-
-  const totalPct = percentages.reduce((s, p) => s + p, 0);
-  const valid = Math.abs(totalPct - 100) < 0.01;
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valid) return;
-    updateMutation.mutate({
-      beneficiary_wallets: beneficiaries,
-      beneficiary_percentages: percentages,
-    });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   if (!isConnected || !address) {
@@ -145,19 +152,19 @@ export default function EditWillPage() {
               Total: {totalPct}% (must be 100%)
             </p>
           )}
-          {updateMutation.error && (
+          {writeError && (
             <p className="text-sm text-wine">
-              {updateMutation.error instanceof Error
-                ? updateMutation.error.message
+              {writeError instanceof Error
+                ? writeError.message
                 : "Update failed"}
             </p>
           )}
           <button
             type="submit"
-            disabled={!valid || updateMutation.isPending}
+            disabled={!valid || isWritePending}
             className="btn-primary w-full py-3"
           >
-            {updateMutation.isPending ? "Saving…" : "Save"}
+            {isWritePending ? "Saving…" : "Save"}
           </button>
         </form>
       </main>

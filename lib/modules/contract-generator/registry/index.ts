@@ -8,11 +8,11 @@
  * Implementation: persist to DB, or call an on-chain WillContractRegistry contract.
  */
 export async function recordDeployedWill(
-  _willId: string,
-  _contractAddress: string
+  willId: string,
+  contractAddress: string
 ): Promise<void> {
   // TODO: store willId -> contractAddress (e.g. API route + DB, or on-chain registry).
-  throw new Error("Not implemented: recordDeployedWill");
+  console.warn(`[Registry Mock] Recorded deployed will ${willId} at address ${contractAddress}`);
 }
 
 /**
@@ -20,8 +20,9 @@ export async function recordDeployedWill(
  * Implementation: read from same store as recordDeployedWill.
  */
 export async function getDeployedContractAddress(
-  _willId: string
+  willId: string
 ): Promise<string | null> {
   // TODO: return stored contract address for willId, or null if not found.
-  throw new Error("Not implemented: getDeployedContractAddress");
+  console.warn(`[Registry Mock] Fetched deployed will address for ${willId}`);
+  return null;
 }
