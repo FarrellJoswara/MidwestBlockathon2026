@@ -1,35 +1,27 @@
 /**
- * Generate Solidity contract source from parser output via Gemini (or template).
- * Foundation only — implement Gemini API call and prompt to produce contract source.
+ * Generate Solidity contract source from parser output via Gemini.
  *
  * Inputs:
- *   - generateContractFromParserData(parserOutput): ParserOutput (raw/semi-structured from parser)
- *   - testGemini(): none (uses env GOOGLE_API_KEY or GEMINI_API_KEY)
+ *   - generateContractFromParserData(parserOutput): ParserOutput
+ *   - testGemini(): none — uses centralized Gemini wrapper
  *
  * Outputs:
  *   - generateContractFromParserData(): GeneratedContract { source, contractName }
  *   - testGemini(): string (model response)
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { callGemini } from "@/lib/gemini";
+import { AppError, ErrorCodes } from "@/lib/errors";
 import type { ParserOutput, GeneratedContract } from "../types";
 
 const GEMINI_MODEL = "gemini-2.5-flash-lite";
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY,
-});
 
 /**
  * Test: call Gemini with a simple prompt (for verification only).
  * Returns the model's text response.
  */
 export async function testGemini(): Promise<string> {
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: "",
-  });
-  return response.text ?? "";
+  return callGemini(GEMINI_MODEL, "");
 }
 
 /**
@@ -57,14 +49,12 @@ ${buildDeclareDeathRequirements()}
 - No \`\`\`solidity wrapper.
 - Just the raw .sol file contents.`;
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-  });
-
-  const raw = response.text?.trim() ?? "";
-  if (!raw) {
-    throw new Error("Gemini returned empty response");
+  let raw: string;
+  try {
+    raw = await callGemini(GEMINI_MODEL, prompt);
+  } catch (err) {
+    console.error("[generate] Gemini contract generation failed:", err);
+    throw err;
   }
 
   const source = extractSoliditySource(raw);
@@ -124,14 +114,26 @@ function validateDeclareDeathSupport(source: string): void {
     /(enum\s+\w+\s*\{[\s\S]*Active[\s\S]*DeathDeclared[\s\S]*Executed[\s\S]*\})|status/.test(source);
 
   if (!hasFunction) {
-    throw new Error("Generated contract is missing required function: declareDeath(uint256 willId) external");
+    throw new AppError(
+      "Generated contract is missing required function: declareDeath(uint256 willId) external",
+      ErrorCodes.GEMINI_RESPONSE_INVALID,
+      502,
+    );
   }
 
   if (!hasEvent) {
-    throw new Error("Generated contract is missing required DeathDeclared event");
+    throw new AppError(
+      "Generated contract is missing required DeathDeclared event",
+      ErrorCodes.GEMINI_RESPONSE_INVALID,
+      502,
+    );
   }
 
   if (!hasStatusKeyword) {
-    throw new Error("Generated contract is missing a recognizable will status system including DeathDeclared");
+    throw new AppError(
+      "Generated contract is missing a recognizable will status system including DeathDeclared",
+      ErrorCodes.GEMINI_RESPONSE_INVALID,
+      502,
+    );
   }
 }

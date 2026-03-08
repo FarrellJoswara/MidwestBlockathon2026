@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { compileContract } from "@/lib/modules/contract-generator/pipeline/compile";
+import { handleApiError, errorResponse } from "@/lib/api-helpers";
+import { AppError, ErrorCodes } from "@/lib/errors";
 
 /**
  * POST /api/contract/compile — compile Solidity source to bytecode + ABI for client-side deploy.
@@ -11,9 +13,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { source, contractName: name } = body as { source?: string; contractName?: string };
     if (!source || typeof source !== "string") {
-      return NextResponse.json(
-        { error: "Missing or invalid body: { source: string, contractName?: string }" },
-        { status: 400 }
+      return errorResponse(
+        "Missing or invalid body: { source: string, contractName?: string }",
+        ErrorCodes.VALIDATION_ERROR,
+        400,
       );
     }
     const contractName = name ?? (source.match(/contract\s+(\w+)\s*\{/)?.[1] ?? "Contract");
@@ -23,8 +26,20 @@ export async function POST(req: Request) {
       abi: compiled.abi,
       contractName: compiled.contractName,
     });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 400 });
+  } catch (err) {
+    // Wrap compilation errors with a friendly code
+    if (err instanceof Error && !(err instanceof AppError)) {
+      const compileErr = new AppError(
+        "Contract compilation failed. Check your Solidity source for errors.",
+        ErrorCodes.COMPILATION_FAILED,
+        400,
+      );
+      console.error("[contract/compile]", err);
+      return NextResponse.json(
+        { error: { message: compileErr.message, code: compileErr.code } },
+        { status: compileErr.status },
+      );
+    }
+    return handleApiError(err, "contract/compile");
   }
 }

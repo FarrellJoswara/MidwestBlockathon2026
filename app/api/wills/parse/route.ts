@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseWillFromBuffer } from "@/lib/modules/contract-parser/pipeline/parseWillFromCID";
+import { handleApiError, errorResponse } from "@/lib/api-helpers";
+import { ErrorCodes } from "@/lib/errors";
 
 /**
  * POST /api/wills/parse
@@ -12,16 +14,16 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get("file");
     if (!file || !(file instanceof File)) {
-      return NextResponse.json(
-        { error: "Missing or invalid file. Send multipart/form-data with 'file' (PDF)." },
-        { status: 400 }
+      return errorResponse(
+        "Missing or invalid file. Send multipart/form-data with 'file' (PDF).",
+        ErrorCodes.VALIDATION_ERROR,
+        400,
       );
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const parsed = await parseWillFromBuffer(buffer);
     return NextResponse.json(parsed);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (err) {
+    return handleApiError(err, "wills/parse");
   }
 }

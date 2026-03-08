@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
+import { errorResponse } from "@/lib/api-helpers";
+import { ErrorCodes } from "@/lib/errors";
 
 export async function POST(
   req: NextRequest,
@@ -7,9 +9,10 @@ export async function POST(
 ) {
   const wallet = getWalletFromRequest(req);
   if (!wallet) {
-    return NextResponse.json(
-      { error: "Missing or invalid x-wallet-address header" },
-      { status: 401 }
+    return errorResponse(
+      "Missing or invalid x-wallet-address header",
+      ErrorCodes.UNAUTHORIZED,
+      401,
     );
   }
 
@@ -17,19 +20,18 @@ export async function POST(
   const result = await getWillWithRole(id, wallet);
 
   if (!result || result.role !== "executor") {
-    return NextResponse.json(
-      { error: "Only executor can declare death" },
-      { status: 403 }
+    return errorResponse(
+      "Only executor can declare death",
+      ErrorCodes.FORBIDDEN,
+      403,
     );
   }
 
   if (result.will.status !== "death_declared") {
-    return NextResponse.json(
-      {
-        error:
-          "Will is not marked death_declared on-chain yet. Declare death from the wallet first.",
-      },
-      { status: 400 }
+    return errorResponse(
+      "Will is not marked death_declared on-chain yet. Declare death from the wallet first.",
+      ErrorCodes.VALIDATION_ERROR,
+      400,
     );
   }
 

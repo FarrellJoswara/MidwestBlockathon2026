@@ -33,6 +33,8 @@ export interface Beneficiary {
 
 /** Full structured output from will parsing */
 export interface ParsedWill {
+  /** Concise 1–2 sentence summary of the will */
+  description?: string;
   /** Legal name of the testator (will creator) */
   testator_name?: string;
   /** Placeholder for the testator's wallet — resolved downstream */
