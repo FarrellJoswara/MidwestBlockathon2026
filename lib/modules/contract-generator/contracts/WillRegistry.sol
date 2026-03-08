@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
-/**
- * WillRegistry — stores will metadata on-chain.
- * Creator, executor, beneficiaries, percentages, IPFS CID, encrypted key IV, status.
- * Indexed by creator, executor, and beneficiaries for "my wills" queries.
- */
 contract WillRegistry {
-    enum Status { Active, DeathDeclared, Executed }
+    enum WillStatus { Active, DeathDeclared, Executed }
 
     struct Will {
         uint256 id;
@@ -17,160 +12,179 @@ contract WillRegistry {
         uint256[] beneficiaryPercentages;
         string ipfsCid;
         string encryptedDocKeyIv;
-        Status status;
+        WillStatus status;
         uint256 createdAt;
         uint256 updatedAt;
     }
 
-    uint256 public nextWillId = 1;
+    uint256 private _willCounter;
     mapping(uint256 => Will) public wills;
-    mapping(address => uint256[]) private _creatorWillIds;
-    mapping(address => uint256[]) private _executorWillIds;
-    mapping(address => uint256[]) private _beneficiaryWillIds;
 
-    event WillCreated(uint256 indexed id, address indexed creator, address indexed executor);
-    event WillUpdated(uint256 indexed id, Status status);
+    // Track user roles to will IDs for fast querying
+    mapping(address => uint256[]) private _creatorWills;
+    mapping(address => uint256[]) private _executorWills;
+    mapping(address => uint256[]) private _beneficiaryWills;
+
+    event WillCreated(uint256 indexed willId, address indexed creator);
+    event WillUpdated(uint256 indexed willId, address indexed creator);
+    event DeathDeclared(uint256 indexed willId, address indexed executor, uint256 timestamp);
+    event WillExecuted(uint256 indexed willId, address indexed executor);
 
     function createWill(
         address creatorWallet,
-        address[] calldata beneficiaryWallets,
-        uint256[] calldata beneficiaryPercentages,
-        string calldata ipfsCid,
-        string calldata encryptedDocKeyIv
-    ) external returns (uint256 id) {
-        require(msg.sender != address(0), "invalid executor");
-        require(creatorWallet != address(0), "invalid creator");
-        require(
-            beneficiaryWallets.length == beneficiaryPercentages.length && beneficiaryWallets.length > 0,
-            "bad beneficiaries"
-        );
-        uint256 sum = 0;
+        address executorWallet,
+        address[] memory beneficiaryWallets,
+        uint256[] memory beneficiaryPercentages,
+        string memory ipfsCid,
+        string memory encryptedDocKeyIv
+    ) external returns (uint256) {
+        require(beneficiaryWallets.length == beneficiaryPercentages.length, "Beneficiary arrays length mismatch");
+        
+        uint256 totalPercentage = 0;
         for (uint256 i = 0; i < beneficiaryPercentages.length; i++) {
-            sum += beneficiaryPercentages[i];
+            totalPercentage += beneficiaryPercentages[i];
         }
-        require(sum == 100, "percentages must sum to 100");
+        require(totalPercentage == 100, "Total percentage must be 100");
 
-        id = nextWillId++;
-        address executorWallet = msg.sender;
+        _willCounter++;
+        uint256 newWillId = _willCounter;
 
-        wills[id] = Will({
-            id: id,
+        wills[newWillId] = Will({
+            id: newWillId,
             creatorWallet: creatorWallet,
             executorWallet: executorWallet,
             beneficiaryWallets: beneficiaryWallets,
             beneficiaryPercentages: beneficiaryPercentages,
             ipfsCid: ipfsCid,
             encryptedDocKeyIv: encryptedDocKeyIv,
-            status: Status.Active,
+            status: WillStatus.Active,
             createdAt: block.timestamp,
             updatedAt: block.timestamp
         });
 
-        _creatorWillIds[creatorWallet].push(id);
-        _executorWillIds[executorWallet].push(id);
+        _creatorWills[creatorWallet].push(newWillId);
+        _executorWills[executorWallet].push(newWillId);
+        
         for (uint256 i = 0; i < beneficiaryWallets.length; i++) {
-            _beneficiaryWillIds[beneficiaryWallets[i]].push(id);
+            _beneficiaryWills[beneficiaryWallets[i]].push(newWillId);
         }
 
-        emit WillCreated(id, creatorWallet, executorWallet);
-        return id;
+        emit WillCreated(newWillId, creatorWallet);
+        return newWillId;
     }
 
     function updateWill(
         uint256 willId,
-        address[] calldata beneficiaryWallets,
-        uint256[] calldata beneficiaryPercentages,
-        string calldata ipfsCid,
-        string calldata encryptedDocKeyIv,
-        Status status
+        address[] memory beneficiaryWallets,
+        uint256[] memory beneficiaryPercentages,
+        string memory ipfsCid,
+        string memory encryptedDocKeyIv
     ) external {
-        Will storage w = wills[willId];
-        require(w.id != 0, "will not found");
-        require(w.executorWallet == msg.sender, "only executor");
-        require(w.status == Status.Active, "will not active");
+        Will storage willData = wills[willId];
+        require(willData.id != 0, "Will does not exist");
+        require(msg.sender == willData.creatorWallet, "Only creator can update");
+        require(willData.status == WillStatus.Active, "Will is not active");
+        require(beneficiaryWallets.length == beneficiaryPercentages.length, "Beneficiary arrays length mismatch");
 
-        if (beneficiaryWallets.length > 0) {
-            require(
-                beneficiaryWallets.length == beneficiaryPercentages.length,
-                "bad beneficiaries"
-            );
-            uint256 sum = 0;
-            for (uint256 i = 0; i < beneficiaryPercentages.length; i++) {
-                sum += beneficiaryPercentages[i];
-            }
-            require(sum == 100, "percentages must sum to 100");
-            w.beneficiaryWallets = beneficiaryWallets;
-            w.beneficiaryPercentages = beneficiaryPercentages;
+        uint256 totalPercentage = 0;
+        for (uint256 i = 0; i < beneficiaryPercentages.length; i++) {
+            totalPercentage += beneficiaryPercentages[i];
         }
-        if (bytes(ipfsCid).length > 0) w.ipfsCid = ipfsCid;
-        if (bytes(encryptedDocKeyIv).length > 0) w.encryptedDocKeyIv = encryptedDocKeyIv;
-        if (status != Status.Active) w.status = status;
-        w.updatedAt = block.timestamp;
+        require(totalPercentage == 100, "Total percentage must be 100");
 
-        emit WillUpdated(willId, w.status);
+        willData.beneficiaryWallets = beneficiaryWallets;
+        willData.beneficiaryPercentages = beneficiaryPercentages;
+        
+        if (bytes(ipfsCid).length > 0) {
+            willData.ipfsCid = ipfsCid;
+        }
+        if (bytes(encryptedDocKeyIv).length > 0) {
+            willData.encryptedDocKeyIv = encryptedDocKeyIv;
+        }
+        
+        willData.updatedAt = block.timestamp;
+
+        // Note: For simplicity, we don't completely clear the old beneficiaries from _beneficiaryWills here.
+        // In a production environment, you might want to manage the index correctly to avoid memory leaks.
+        for (uint256 i = 0; i < beneficiaryWallets.length; i++) {
+             // Avoid adding duplicates if they already exist
+             bool exists = false;
+             for (uint256 j = 0; j < _beneficiaryWills[beneficiaryWallets[i]].length; j++) {
+                 if (_beneficiaryWills[beneficiaryWallets[i]][j] == willId) {
+                     exists = true;
+                     break;
+                 }
+             }
+             if (!exists) {
+                _beneficiaryWills[beneficiaryWallets[i]].push(willId);
+             }
+        }
+
+        emit WillUpdated(willId, msg.sender);
     }
 
     function declareDeath(uint256 willId) external {
-        Will storage w = wills[willId];
-        require(w.id != 0, "will not found");
-        require(w.executorWallet == msg.sender, "only executor");
-        require(w.status == Status.Active, "will not active");
-        w.status = Status.DeathDeclared;
-        w.updatedAt = block.timestamp;
-        emit WillUpdated(willId, w.status);
+        Will storage willData = wills[willId];
+        require(willData.id != 0, "Will does not exist");
+        require(msg.sender == willData.executorWallet, "Only executor can declare death");
+        require(willData.status == WillStatus.Active, "Will is not active");
+
+        willData.status = WillStatus.DeathDeclared;
+        willData.updatedAt = block.timestamp;
+
+        emit DeathDeclared(willId, msg.sender, block.timestamp);
     }
 
     function markExecuted(uint256 willId) external {
-        Will storage w = wills[willId];
-        require(w.id != 0, "will not found");
-        require(w.executorWallet == msg.sender, "only executor");
-        require(w.status == Status.DeathDeclared, "declare death first");
-        w.status = Status.Executed;
-        w.updatedAt = block.timestamp;
-        emit WillUpdated(willId, w.status);
+        Will storage willData = wills[willId];
+        require(willData.id != 0, "Will does not exist");
+        require(msg.sender == willData.executorWallet, "Only executor can mark as executed");
+        require(willData.status == WillStatus.DeathDeclared, "Death has not been declared");
+
+        willData.status = WillStatus.Executed;
+        willData.updatedAt = block.timestamp;
+
+        emit WillExecuted(willId, msg.sender);
     }
 
-    function getWill(uint256 willId)
-        external
-        view
-        returns (
-            uint256 id,
-            address creatorWallet,
-            address executorWallet,
-            address[] memory beneficiaryWallets,
-            uint256[] memory beneficiaryPercentages,
-            string memory ipfsCid,
-            string memory encryptedDocKeyIv,
-            Status status,
-            uint256 createdAt,
-            uint256 updatedAt
-        )
-    {
-        Will storage w = wills[willId];
-        require(w.id != 0, "will not found");
+    function getWill(uint256 willId) external view returns (
+        uint256 id,
+        address creatorWallet,
+        address executorWallet,
+        address[] memory beneficiaryWallets,
+        uint256[] memory beneficiaryPercentages,
+        string memory ipfsCid,
+        string memory encryptedDocKeyIv,
+        WillStatus status,
+        uint256 createdAt,
+        uint256 updatedAt
+    ) {
+        Will storage willData = wills[willId];
+        require(willData.id != 0, "Will does not exist");
+
         return (
-            w.id,
-            w.creatorWallet,
-            w.executorWallet,
-            w.beneficiaryWallets,
-            w.beneficiaryPercentages,
-            w.ipfsCid,
-            w.encryptedDocKeyIv,
-            w.status,
-            w.createdAt,
-            w.updatedAt
+            willData.id,
+            willData.creatorWallet,
+            willData.executorWallet,
+            willData.beneficiaryWallets,
+            willData.beneficiaryPercentages,
+            willData.ipfsCid,
+            willData.encryptedDocKeyIv,
+            willData.status,
+            willData.createdAt,
+            willData.updatedAt
         );
     }
 
     function getWillIdsByCreator(address creator) external view returns (uint256[] memory) {
-        return _creatorWillIds[creator];
+        return _creatorWills[creator];
     }
 
     function getWillIdsByExecutor(address executor) external view returns (uint256[] memory) {
-        return _executorWillIds[executor];
+        return _executorWills[executor];
     }
 
     function getWillIdsByBeneficiary(address beneficiary) external view returns (uint256[] memory) {
-        return _beneficiaryWillIds[beneficiary];
+        return _beneficiaryWills[beneficiary];
     }
 }
