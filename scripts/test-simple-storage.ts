@@ -36,10 +36,10 @@ async function main() {
   let valueToSet: bigint;
   if (a2?.startsWith("0x")) {
     contractAddress = a2 as Address;
-    valueToSet = a3 !== undefined ? BigInt(a3) : 12345n;
+    valueToSet = a3 !== undefined ? BigInt(a3) : BigInt(12345);
   } else {
     contractAddress = defaultAddress as Address;
-    valueToSet = a2 !== undefined ? BigInt(a2) : 12345n;
+    valueToSet = a2 !== undefined ? BigInt(a2) : BigInt(12345);
   }
 
   const rpcUrl = process.env.DEPLOY_RPC_URL ?? process.env.RPC_URL ?? process.env.WILL_REGISTRY_RPC_URL ?? DEFAULT_RPC;

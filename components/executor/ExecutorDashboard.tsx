@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/modules/api";
 import { executorApiPaths } from "@/lib/modules/executor";
 import type { Will } from "@/lib/modules/types";
 import { useEffect } from "react";
-import { useDeclareDeath } from "@/lib/modules/contract-generator/useDeclareDeath";
+import { useDeclareDeath } from "@/lib/modules/contract-generator/hooks/useDeclareDeath";
 
 interface ExecutorDashboardProps {
   will: Will;
