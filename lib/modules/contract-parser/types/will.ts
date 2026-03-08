@@ -1,22 +1,33 @@
 /**
  * Parsed will types — structured output from Gemini will analysis.
- * Consumed by the contract generator to build Solidity constructor params.
+ *
+ * Wallet addresses are NOT extracted from the PDF — they don't exist there.
+ * Instead each party gets a `placeholderId` (derived from their name) that
+ * the next pipeline stage will resolve into a real wallet address.
  */
 
-/** Asset type for on-chain representation */
-export type AssetType = "ETH" | "ERC20" | "ERC721" | "OTHER";
+/**
+ * Asset category as extracted from the will.
+ * These are real-world asset types — the on-chain representation
+ * (stablecoin transfer, court-issued NFT deed, etc.) is determined
+ * by a later pipeline stage, not the parser.
+ */
+export type AssetType = "CASH" | "PROPERTY" | "VEHICLE" | "PERSONAL_ITEM" | "OTHER";
 
 /** A single beneficiary extracted from the will */
 export interface Beneficiary {
   /** Full legal name of the beneficiary */
   name: string;
-  /** Wallet address if explicitly mentioned in the will */
-  walletAddress?: string;
+  /**
+   * Stable placeholder derived from the name (e.g. "alice_johnson").
+   * The address-resolution stage replaces this with a real wallet address.
+   */
+  placeholderId: string;
   /** Description of the asset being bequeathed */
   assetDescription: string;
-  /** On-chain asset classification */
+  /** Real-world asset classification */
   assetType: AssetType;
-  /** Amount or token ID (string to support large numbers / NFT IDs) */
+  /** Dollar amount, percentage, or descriptive quantity */
   amount?: string;
 }
 
@@ -24,12 +35,12 @@ export interface Beneficiary {
 export interface ParsedWill {
   /** Legal name of the testator (will creator) */
   testator_name?: string;
-  /** Physical or wallet address of the testator */
-  testator_address?: string;
+  /** Placeholder for the testator's wallet — resolved downstream */
+  testator_placeholderId?: string;
   /** Legal name of the executor */
   executor_name?: string;
-  /** Wallet address of the executor */
-  executor_address?: string;
+  /** Placeholder for the executor's wallet — resolved downstream */
+  executor_placeholderId?: string;
   /** List of beneficiaries and their allocations */
   beneficiaries: Beneficiary[];
   /** Conditions that must be met before distribution */
@@ -37,3 +48,4 @@ export interface ParsedWill {
   /** Any additional instructions from the will */
   additionalInstructions?: string;
 }
+

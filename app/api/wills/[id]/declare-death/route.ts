@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
-import { updateWill } from "@/lib/modules/chain";
 
 export async function POST(
   req: NextRequest,
@@ -13,39 +12,37 @@ export async function POST(
       { status: 401 }
     );
   }
+
   const { id } = await params;
   const result = await getWillWithRole(id, wallet);
+
   if (!result || result.role !== "executor") {
     return NextResponse.json(
       { error: "Only executor can declare death" },
       { status: 403 }
     );
   }
-  if (result.will.status !== "active") {
+
+  if (result.will.status !== "death_declared") {
     return NextResponse.json(
-      { error: "Death already declared or will executed" },
+      {
+        error:
+          "Will is not marked death_declared on-chain yet. Declare death from the wallet first.",
+      },
       { status: 400 }
     );
   }
+
+  let body: { txHash?: string } = {};
   try {
-    const will = await updateWill(id, { status: "death_declared" });
-    return NextResponse.json({ will });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to declare death";
-    if (msg.includes("on-chain from the frontend")) {
-      return NextResponse.json(
-        {
-          error: msg,
-          useContract: true,
-          contractAddress: process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS ?? null,
-        },
-        { status: 501 }
-      );
-    }
-    console.error(e);
-    return NextResponse.json(
-      { error: msg },
-      { status: 500 }
-    );
+    body = await req.json();
+  } catch {
+    body = {};
   }
+
+  return NextResponse.json({
+    ok: true,
+    txHash: body.txHash ?? null,
+    will: result.will,
+  });
 }
