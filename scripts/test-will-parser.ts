@@ -54,15 +54,15 @@ function testTypedSchema() {
       {
         name: "Alice Johnson",
         placeholderId: "alice_johnson",
-        assetDescription: "50% of ETH holdings",
-        assetType: "ETH",
-        amount: "5.0",
+        assetDescription: "$10,000 from savings account",
+        assetType: "CASH",
+        amount: "10000",
       },
       {
         name: "Bob Williams",
         placeholderId: "bob_williams",
-        assetDescription: "Family house",
-        assetType: "OTHER",
+        assetDescription: "Family house at 123 Main St",
+        assetType: "PROPERTY",
       },
     ],
     conditions: ["Must be 18 or older"],
@@ -72,9 +72,9 @@ function testTypedSchema() {
   assert(mockWill.testator_name === "John Doe", "testator_name is set");
   assert(mockWill.testator_placeholderId === "john_doe", "testator placeholder is snake_case name");
   assert(mockWill.beneficiaries.length === 2, "2 beneficiaries");
-  assert(mockWill.beneficiaries[0].assetType === "ETH", "first beneficiary assetType = ETH");
+  assert(mockWill.beneficiaries[0].assetType === "CASH", "first beneficiary assetType = CASH");
   assert(mockWill.beneficiaries[0].placeholderId === "alice_johnson", "first beneficiary has placeholderId");
-  assert(mockWill.beneficiaries[1].placeholderId === "bob_williams", "second beneficiary has placeholderId");
+  assert(mockWill.beneficiaries[1].assetType === "PROPERTY", "second beneficiary assetType = PROPERTY");
   assert(mockWill.conditions!.length === 1, "1 condition");
 
   // Verify JSON round-trip

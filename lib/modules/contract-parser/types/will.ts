@@ -6,8 +6,13 @@
  * the next pipeline stage will resolve into a real wallet address.
  */
 
-/** Asset type for on-chain representation */
-export type AssetType = "ETH" | "ERC20" | "ERC721" | "OTHER";
+/**
+ * Asset category as extracted from the will.
+ * These are real-world asset types — the on-chain representation
+ * (stablecoin transfer, court-issued NFT deed, etc.) is determined
+ * by a later pipeline stage, not the parser.
+ */
+export type AssetType = "CASH" | "PROPERTY" | "VEHICLE" | "PERSONAL_ITEM" | "OTHER";
 
 /** A single beneficiary extracted from the will */
 export interface Beneficiary {
@@ -20,9 +25,9 @@ export interface Beneficiary {
   placeholderId: string;
   /** Description of the asset being bequeathed */
   assetDescription: string;
-  /** On-chain asset classification */
+  /** Real-world asset classification */
   assetType: AssetType;
-  /** Amount or token ID (string to support large numbers / NFT IDs) */
+  /** Dollar amount, percentage, or descriptive quantity */
   amount?: string;
 }
 

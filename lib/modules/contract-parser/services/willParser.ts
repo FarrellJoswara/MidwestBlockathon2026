@@ -79,8 +79,8 @@ The JSON must match this exact schema:
       "name": "string — full legal name of the beneficiary",
       "placeholderId": "string — lowercase_underscored version of name",
       "assetDescription": "string — description of the bequeathed asset",
-      "assetType": "one of: ETH, ERC20, ERC721, OTHER",
-      "amount": "string or null — amount, percentage, or token ID"
+      "assetType": "one of: CASH, PROPERTY, VEHICLE, PERSONAL_ITEM, OTHER",
+      "amount": "string or null — dollar amount, percentage, or descriptive quantity"
     }
   ],
   "conditions": ["string — any conditions for distribution"],
@@ -90,10 +90,11 @@ The JSON must match this exact schema:
 Rules:
 - If a field is not found in the document, set it to null or omit it.
 - For assetType, classify as:
-    • ETH — native Ether or generic cryptocurrency
-    • ERC20 — fungible tokens (USDC, DAI, etc.)
-    • ERC721 — NFTs or unique digital assets
-    • OTHER — real estate, physical assets, or unclassifiable items
+    • CASH — money, bank accounts, dollar amounts, savings, financial accounts
+    • PROPERTY — real estate, houses, land, buildings
+    • VEHICLE — cars, trucks, boats, motorcycles
+    • PERSONAL_ITEM — jewelry, art, furniture, electronics, heirlooms, collectibles
+    • OTHER — anything that does not fit the above categories
 - Extract ALL beneficiaries mentioned.
 - Do NOT include any wallet addresses — they will be resolved later.
 - Ignore boilerplate legal language unrelated to asset distribution.
@@ -130,7 +131,7 @@ async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
 
 // ── JSON validation helpers ──────────────────────────────────────────────────
 
-const VALID_ASSET_TYPES: AssetType[] = ["ETH", "ERC20", "ERC721", "OTHER"];
+const VALID_ASSET_TYPES: AssetType[] = ["CASH", "PROPERTY", "VEHICLE", "PERSONAL_ITEM", "OTHER"];
 
 /**
  * Validate and coerce the raw JSON object into a well-typed ParsedWill.

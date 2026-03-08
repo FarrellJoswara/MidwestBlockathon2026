@@ -93,9 +93,9 @@ function generateTestWill() {
     .text("Section 2.1 — Sofia Marie Rivera (Daughter)")
     .font("Helvetica")
     .text(
-      "I bequeath to my daughter, Sofia Marie Rivera, the sum of 10 Ether (ETH) " +
-        "from my cryptocurrency holdings, representing approximately forty percent (40%) " +
-        "of my digital asset portfolio.",
+      "I bequeath to my daughter, Sofia Marie Rivera, the sum of 10,000 dollars " +
+        "from my bank account, representing approximately forty percent (40%) " +
+        "of my bank account.",
       { align: "justify" }
     )
     .moveDown(0.5);
@@ -106,8 +106,8 @@ function generateTestWill() {
     .text("Section 2.2 — Elijah James Rivera (Son)")
     .font("Helvetica")
     .text(
-      "I bequeath to my son, Elijah James Rivera, 5,000 USDC tokens " +
-        "held in my digital wallet.",
+      "I bequeath to my son, Elijah James Rivera, my 2016 Honda Accord sedan, " +
+        "VIN 1HGBH41JXMN109186, currently registered in the state of Illinois.",
       { align: "justify" }
     )
     .moveDown(0.5);
@@ -131,7 +131,7 @@ function generateTestWill() {
     .text("Section 2.4 — Midwest Community Arts Foundation")
     .font("Helvetica")
     .text(
-      "I bequeath to the Midwest Community Arts Foundation 2 ETH " +
+      "I bequeath to the Midwest Community Arts Foundation the sum of $5,000 " +
         "as a charitable donation to support youth arts programming.",
       { align: "justify" }
     )
@@ -156,7 +156,7 @@ function generateTestWill() {
     .moveDown(0.3);
 
   doc.text(
-    "3.2  The Executor shall distribute all cryptocurrency assets within sixty (60) " +
+    "3.2  The Executor shall distribute all assets within sixty (60) " +
       "days of the declaration of death, subject to completion of all legal requirements.",
     { align: "justify" }
   )
@@ -181,9 +181,9 @@ function generateTestWill() {
     .font("Helvetica")
     .text(
       "I request that no extraordinary measures be taken to contest the terms of this Will. " +
-        "The Executor has full authority to manage, sell, or transfer any digital assets as " +
-        "necessary to fulfill the distributions specified herein. All transaction fees " +
-        "associated with on-chain transfers shall be deducted from the estate's residual balance.",
+        "The Executor has full authority to manage, sell, or transfer any assets as " +
+        "necessary to fulfill the distributions specified herein. All fees and costs " +
+        "associated with the settlement of this estate shall be deducted from the estate's residual balance.",
       { align: "justify" }
     )
     .moveDown(1.5);
