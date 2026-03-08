@@ -13,7 +13,7 @@ export default function Header() {
         >
           <span className="text-lg text-wine">◆</span>
           <span className="font-serif text-lg font-semibold tracking-tight">
-            dihhapp
+            fossl
           </span>
         </Link>
         <nav className="flex items-center gap-6">

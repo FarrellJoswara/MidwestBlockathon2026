@@ -16,7 +16,7 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: "dihhapp — Digital Inheritance & Will Distribution",
+  title: "fossl — Digital Inheritance & Will Distribution",
   description:
     "Secure, on-chain will management. Upload your will, designate beneficiaries, and let executors handle distribution — all without storing your keys.",
 };

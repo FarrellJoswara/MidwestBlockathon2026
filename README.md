@@ -1,4 +1,4 @@
-# dihhapp — Digital Will Distribution MVP
+# fossl — Digital Will Distribution MVP
 
 Web-based MVP for managing **digital wills** tied to blockchain wallet addresses. The platform does not create legal wills; it manages distribution instructions. Each will has a **creator wallet**, an **executor** (full management rights), and **beneficiaries** with percentage allocations.
 
@@ -74,7 +74,7 @@ Open [http://localhost:3000](http://localhost:3000). Log in with Privy (wallet, 
    Use a different browser (or incognito) or another Privy login. Add that wallet as a beneficiary in a will (from the executor account). Log in as that wallet → **My Wills** → open the will → you should see the beneficiary dashboard (allocation %, no edit/declare/distribute).
 
 6. **Quick sanity checks**  
-   - Home loads and shows “dihhapp” and Login.  
+   - Home loads and shows “fossl” and Login.  
    - After login, “My Wills” and “Open My Wills” work.  
    - `/wills` shows your wills or “You have no wills yet.”  
    - Build: `npm run build` completes without errors.

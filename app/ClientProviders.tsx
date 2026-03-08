@@ -22,7 +22,7 @@ const loadingFallback = (
       fontFamily: "system-ui, sans-serif",
     }}
   >
-    <p>Loading dihhapp…</p>
+    <p>Loading fossl…</p>
   </div>
 );
 

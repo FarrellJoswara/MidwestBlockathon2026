@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IWillExecute {
-    function execute() external;
-}
-
 /**
  * Minimal backup registry for demo only. Not derived from WillRegistry.sol.
  * - createWill: same signature as app expects; stores will and indexes by creator/executor/beneficiary.
- * - declareDeath: anyone can call; invokes generated contract execute() then marks executed. No permission checks.
+ * - declareDeath: anyone can call; marks will Executed only (no asset transfer — display-only demo).
  * - getWill / getWillIdsBy*: same return shape so app and chain module work unchanged.
- * No updateWill, no markExecuted.
+ * - markExecuted(willId): no-op for ABI compatibility (declareDeath already sets Executed).
+ * - updateWill(...): reverts UpdateNotSupported (ABI compatibility; backup does not support edits).
  */
 contract WillRegistryBackup {
     enum Status { Active, DeathDeclared, Executed }
@@ -38,6 +35,7 @@ contract WillRegistryBackup {
     error NotFound();
     error NotActive();
     error InvalidInput();
+    error UpdateNotSupported();
 
     function createWill(
         address executor,
@@ -82,13 +80,28 @@ contract WillRegistryBackup {
         if (w.id == 0) revert NotFound();
         if (w.status != Status.Active) revert NotActive();
 
-        if (w.generatedContractAddress != address(0)) {
-            IWillExecute(w.generatedContractAddress).execute();
-        }
-
+        // Demo only: do not call generated contract execute(); just mark executed so UI shows "Done"
         w.status = Status.Executed;
         w.updatedAt = block.timestamp;
         emit WillExecuted(willId, msg.sender);
+    }
+
+    /// Reverts: backup registry does not support updating wills (ABI compatibility only).
+    function updateWill(
+        uint256,
+        address[] calldata,
+        string calldata,
+        string calldata
+    ) external pure {
+        revert UpdateNotSupported();
+    }
+
+    /// No-op for ABI compatibility with full WillRegistry; declareDeath already sets status to Executed.
+    function markExecuted(uint256 willId) external {
+        Will storage w = wills[willId];
+        if (w.id == 0) revert NotFound();
+        if (w.status == Status.Executed) return; // already executed, no-op
+        revert NotActive(); // not yet executed; caller should use declareDeath first
     }
 
     function getWill(uint256 willId)

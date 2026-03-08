@@ -10,6 +10,7 @@ import {
   extractSoliditySource,
   extractContractName,
   validateDeclareDeathSupport,
+  normalizeToSingleContractWithExecute,
 } from "./pipeline/prompt-and-parse";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite-preview";
@@ -66,7 +67,8 @@ export async function generateContractFromParserDataClient(
 
   const source = extractSoliditySource(raw);
   validateDeclareDeathSupport(source);
-  const contractName = extractContractName(source);
+  const normalizedSource = normalizeToSingleContractWithExecute(source);
+  const contractName = extractContractName(normalizedSource);
 
-  return { source, contractName };
+  return { source: normalizedSource, contractName };
 }

@@ -106,7 +106,15 @@ export default function EditWillPage() {
       queryClient.invalidateQueries({ queryKey: ["will", id, address] });
       router.push(`/wills/${id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Update failed");
+      const msg = err instanceof Error ? err.message : String(err);
+      const isUpdateNotSupported =
+        /UpdateNotSupported|update not supported|does not support/i.test(msg) ||
+        (err as { shortMessage?: string })?.shortMessage?.includes("UpdateNotSupported");
+      setError(
+        isUpdateNotSupported
+          ? "This registry does not support editing wills. Create a new will to change beneficiaries."
+          : msg
+      );
     } finally {
       setSaving(false);
     }

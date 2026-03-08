@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useAccount, useWriteContract, useDeployContract, usePublicClient, useChainId, useSwitchChain, useWalletClient } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { validateWillFormParams } from "@/lib/modules/ui";
@@ -23,6 +24,44 @@ const CONTRACT_ADDRESS = process.env
 const ERROR_STRING_ABI = [
   { type: "error" as const, name: "Error", inputs: [{ name: "message", type: "string" }] },
 ] as const;
+
+/** Expandable .sol source viewer for the success confirmation. */
+function SuccessSourceView({ source }: { source: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(source);
+  };
+  return (
+    <div className="rounded-lg border border-ink-100 bg-ink-50/50 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-ink-100/50 transition-colors"
+      >
+        <span className="text-xs font-medium uppercase tracking-wide text-ink-400">
+          Generated contract source (.sol)
+        </span>
+        <span className="text-ink-500">{expanded ? "▼ Hide" : "▶ Show"}</span>
+      </button>
+      {expanded && (
+        <div className="border-t border-ink-100 p-2">
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              onClick={copy}
+              className="text-xs font-medium text-wine hover:underline"
+            >
+              Copy to clipboard
+            </button>
+          </div>
+          <pre className="max-h-80 overflow-auto rounded bg-ink-900 text-ink-100 p-3 text-xs font-mono whitespace-pre break-words">
+            {source}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Extract contract revert reason from viem/wagmi/Privy errors for display. */
 function getRevertReason(err: unknown): string | null {
@@ -86,6 +125,7 @@ export default function CreateWillPage() {
   const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -100,7 +140,9 @@ export default function CreateWillPage() {
     registryTxHash: string;
     deploymentTxHash?: string;
     contractAddress?: string;
+    registryContractAddress?: string;
     explorerUrl: string;
+    generatedSource?: string;
   } | null>(null);
   /** Hold last createWill args so we can simulate in catch to get revert reason */
   const lastCreateWillArgsRef = useRef<{
@@ -481,11 +523,14 @@ export default function CreateWillPage() {
           gas: gasLimit,
         });
         console.log("[CreateWill] Step 7: Will created on registry", { registryTxHash });
+        queryClient.invalidateQueries({ queryKey: ["wills", address] });
         setSuccessResult({
           registryTxHash,
           deploymentTxHash: txHashDeploy,
           contractAddress,
+          registryContractAddress: CONTRACT_ADDRESS ?? undefined,
           explorerUrl,
+          generatedSource: generated.source,
         });
         // User can click "View my wills" or we redirect after a short delay
       } else {
@@ -540,7 +585,7 @@ export default function CreateWillPage() {
 
   /* ── Success: show tx hash and links ──────────────────────── */
   if (successResult) {
-    const { registryTxHash, deploymentTxHash, contractAddress, explorerUrl } = successResult;
+    const { registryTxHash, deploymentTxHash, contractAddress, registryContractAddress, explorerUrl, generatedSource } = successResult;
     return (
       <div className="min-h-screen bg-parchment">
         <main className="mx-auto max-w-xl px-6 py-12">
@@ -551,6 +596,42 @@ export default function CreateWillPage() {
             <p className="text-sm text-ink-600">
               Your will has been uploaded to the Will Registry. You can view the transaction and contract below.
             </p>
+
+            {/* Published addresses — links to each contract */}
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                Published addresses
+              </p>
+              <div className="space-y-2 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
+                {registryContractAddress && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-ink-600">Will Registry:</span>
+                    <a
+                      href={`${explorerUrl}/address/${registryContractAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm break-all text-wine hover:underline"
+                    >
+                      {registryContractAddress}
+                    </a>
+                  </div>
+                )}
+                {contractAddress && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-ink-600">Your will contract:</span>
+                    <a
+                      href={`${explorerUrl}/address/${contractAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm break-all text-wine hover:underline"
+                    >
+                      {contractAddress}
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-3 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
                 Registry transaction
@@ -565,22 +646,6 @@ export default function CreateWillPage() {
                 View on block explorer →
               </a>
             </div>
-            {contractAddress && (
-              <div className="space-y-2 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
-                  Will contract address
-                </p>
-                <p className="font-mono text-sm break-all text-ink-800">{contractAddress}</p>
-                <a
-                  href={`${explorerUrl}/address/${contractAddress}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-wine hover:underline"
-                >
-                  View on block explorer →
-                </a>
-              </div>
-            )}
             {deploymentTxHash && (
               <div className="space-y-2 rounded-lg border border-ink-100 bg-ink-50/50 p-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
@@ -597,6 +662,11 @@ export default function CreateWillPage() {
                 </a>
               </div>
             )}
+
+            {generatedSource && (
+              <SuccessSourceView source={generatedSource} />
+            )}
+
             <div className="flex gap-3 pt-2">
               <Link href="/wills" className="btn-wine flex-1 py-2.5 text-center">
                 View my wills
