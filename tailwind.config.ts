@@ -8,6 +8,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        serif: ["var(--font-serif)", "Georgia", "serif"],
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },
       colors: {
@@ -25,8 +26,9 @@ const config: Config = {
           950: "#1f1d1b",
         },
         parchment: "#faf8f4",
-        seal: "#8b3a3a",
-        gold: "#c9a227",
+        wine: "#6B1D3A",
+        gold: "#B8860B",
+        emerald: "#2D5F4A",
       },
     },
   },

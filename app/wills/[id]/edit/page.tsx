@@ -62,9 +62,9 @@ export default function EditWillPage() {
 
   if (!isConnected || !address) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">Connect your wallet.</p>
-        <Link href="/wills" className="mt-4 inline-block text-seal hover:underline">
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-500">Connect your wallet.</p>
+        <Link href="/wills" className="btn-outlined mt-6 inline-flex">
           ← Wills
         </Link>
       </div>
@@ -73,17 +73,17 @@ export default function EditWillPage() {
 
   if (isLoading || !data) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">Loading…</p>
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-400">Loading…</p>
       </div>
     );
   }
 
   if (data.role !== "executor" || data.will.status !== "active") {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">Only the executor can edit an active will.</p>
-        <Link href={`/wills/${id}`} className="mt-4 inline-block text-seal hover:underline">
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-500">Only the executor can edit an active will.</p>
+        <Link href={`/wills/${id}`} className="btn-outlined mt-6 inline-flex">
           ← Back to will
         </Link>
       </div>
@@ -92,16 +92,21 @@ export default function EditWillPage() {
 
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="border-b border-ink-200 bg-parchment/95">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link href={`/wills/${id}`} className="font-semibold text-ink-900">
+      <header className="border-b border-ink-200/60 bg-parchment/95">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link
+            href={`/wills/${id}`}
+            className="text-sm text-ink-500 transition-colors hover:text-ink-900"
+          >
             ← Will
           </Link>
         </div>
       </header>
-      <main className="mx-auto max-w-xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-ink-900">Edit beneficiaries</h1>
-        <form onSubmit={submit} className="mt-8 space-y-6">
+      <main className="mx-auto max-w-xl px-6 py-12">
+        <h1 className="font-serif text-2xl font-bold text-ink-950">
+          Edit Beneficiaries
+        </h1>
+        <form onSubmit={submit} className="mt-10 space-y-6">
           <div className="space-y-3">
             {beneficiaries.map((w, i) => (
               <div key={i} className="flex gap-2">
@@ -115,7 +120,7 @@ export default function EditWillPage() {
                       ...b.slice(i + 1),
                     ])
                   }
-                  className="flex-1 rounded border border-ink-300 bg-white px-3 py-2 font-mono text-sm"
+                  className="input min-w-0 flex-1 font-mono"
                 />
                 <input
                   type="number"
@@ -129,17 +134,19 @@ export default function EditWillPage() {
                       ...p.slice(i + 1),
                     ])
                   }
-                  className="w-20 rounded border border-ink-300 bg-white px-2 py-2 text-sm"
+                  className="input w-20"
                 />
-                <span className="flex items-center text-ink-500">%</span>
+                <span className="flex items-center text-ink-400">%</span>
               </div>
             ))}
           </div>
           {Math.abs(totalPct - 100) > 0.01 && (
-            <p className="text-sm text-amber-700">Total: {totalPct}% (must be 100%)</p>
+            <p className="text-sm text-gold">
+              Total: {totalPct}% (must be 100%)
+            </p>
           )}
           {updateMutation.error && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-wine">
               {updateMutation.error instanceof Error
                 ? updateMutation.error.message
                 : "Update failed"}
@@ -148,7 +155,7 @@ export default function EditWillPage() {
           <button
             type="submit"
             disabled={!valid || updateMutation.isPending}
-            className="w-full rounded-lg bg-ink-900 py-3 text-white disabled:opacity-50 hover:bg-ink-800"
+            className="btn-primary w-full py-3"
           >
             {updateMutation.isPending ? "Saving…" : "Save"}
           </button>

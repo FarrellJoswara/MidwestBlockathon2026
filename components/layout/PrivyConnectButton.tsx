@@ -9,7 +9,7 @@ export function PrivyConnectButton() {
 
   if (!ready) {
     return (
-      <span className="rounded-lg border border-ink-200 bg-ink-100 px-4 py-2 text-sm text-ink-500">
+      <span className="rounded-lg border border-ink-200 bg-ink-50 px-4 py-2 text-sm text-ink-400">
         Loading…
       </span>
     );
@@ -20,9 +20,9 @@ export function PrivyConnectButton() {
       <button
         type="button"
         onClick={login}
-        className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-800"
+        className="btn-wine"
       >
-        Login
+        Connect Wallet
       </button>
     );
   }
@@ -35,13 +35,13 @@ export function PrivyConnectButton() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="rounded-lg border border-ink-200 bg-parchment px-3 py-1.5 font-mono text-sm text-ink-700">
+      <span className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 font-mono text-xs text-ink-600">
         {displayAddress}
       </span>
       <button
         type="button"
         onClick={logout}
-        className="rounded-lg border border-ink-300 bg-white px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50"
+        className="btn-outlined text-xs"
       >
         Log out
       </button>

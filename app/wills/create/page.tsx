@@ -6,11 +6,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { validateWillFormParams } from "@/lib/modules/ui";
 import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import type { ParserOutput } from "@/lib/modules/contract-generator/types";
+import type { ParsedWill } from "@/lib/modules/contract-parser/types/will";
 import { type Address } from "viem";
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
+const CONTRACT_ADDRESS = process.env
+  .NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
-/** One asset row: description + beneficiary + NFT equivalent (contract + token ID). */
+/** One asset row: description + beneficiary + NFT equivalent. */
 interface AssetRow {
   assetDescription: string;
   beneficiaryIndex: number;
@@ -22,20 +25,19 @@ export default function CreateWillPage() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const router = useRouter();
-  const [creatorWallet, setCreatorWallet] = useState("");
-  const [beneficiaryNames, setBeneficiaryNames] = useState<string[]>(["", ""]);
-  const [beneficiaries, setBeneficiaries] = useState<string[]>(["", ""]);
-  const [percentages, setPercentages] = useState<number[]>([50, 50]);
-  const [assets, setAssets] = useState<AssetRow[]>([
-    { assetDescription: "", beneficiaryIndex: 0, nftContractAddress: "", nftTokenId: "" },
-  ]);
   const [file, setFile] = useState<File | null>(null);
+  const [analyzed, setAnalyzed] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [beneficiaryNames, setBeneficiaryNames] = useState<string[]>([]);
+  const [beneficiaries, setBeneficiaries] = useState<string[]>([]);
+  const [percentages, setPercentages] = useState<number[]>([]);
+  const [assets, setAssets] = useState<AssetRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const totalPct = percentages.reduce((s, p) => s + p, 0);
   const validation = validateWillFormParams({
-    creator_wallet: creatorWallet,
+    creator_wallet: address ?? "",
     beneficiary_wallets: beneficiaries,
     beneficiary_percentages: percentages,
   });
@@ -68,7 +70,11 @@ export default function CreateWillPage() {
       a.map((row) => ({
         ...row,
         beneficiaryIndex:
-          row.beneficiaryIndex === i ? 0 : row.beneficiaryIndex > i ? row.beneficiaryIndex - 1 : row.beneficiaryIndex,
+          row.beneficiaryIndex === i
+            ? 0
+            : row.beneficiaryIndex > i
+              ? row.beneficiaryIndex - 1
+              : row.beneficiaryIndex,
       }))
     );
   };
@@ -76,7 +82,12 @@ export default function CreateWillPage() {
   const addAsset = () => {
     setAssets((a) => [
       ...a,
-      { assetDescription: "", beneficiaryIndex: 0, nftContractAddress: "", nftTokenId: "" },
+      {
+        assetDescription: "",
+        beneficiaryIndex: 0,
+        nftContractAddress: "",
+        nftTokenId: "",
+      },
     ]);
   };
 
@@ -95,13 +106,107 @@ export default function CreateWillPage() {
     setAssets((a) => a.filter((_, j) => j !== i));
   };
 
+  /** Parse percentage from amount string. */
+  function parsePercentageFromAmount(
+    amount: string | undefined,
+    count: number
+  ): number {
+    if (!amount || count <= 0) return 0;
+    const num = parseInt(amount.replace(/[^0-9]/g, ""), 10);
+    if (!Number.isNaN(num) && num >= 0 && num <= 100) return num;
+    return Math.floor(100 / count);
+  }
+
+  const analyzeWill = async () => {
+    if (!file) return;
+    setAnalyzing(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/wills/parse", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          (err as { error?: string }).error ?? res.statusText
+        );
+      }
+      const parsed: ParsedWill = await res.json();
+      const bens = parsed.beneficiaries ?? [];
+      if (bens.length === 0) {
+        throw new Error(
+          "No beneficiaries found in the will. Please check the document."
+        );
+      }
+      const totalPct = bens.reduce(
+        (sum, b) => sum + parsePercentageFromAmount(b.amount, bens.length),
+        0
+      );
+      const pcts =
+        totalPct > 0
+          ? bens.map((b) =>
+              parsePercentageFromAmount(b.amount, bens.length)
+            )
+          : bens.map(() => Math.floor(100 / bens.length));
+      const remainder = 100 - pcts.reduce((s, p) => s + p, 0);
+      if (remainder !== 0 && pcts.length > 0) pcts[0] += remainder;
+
+      setBeneficiaryNames(bens.map((b) => b.name));
+      setBeneficiaries(bens.map(() => ""));
+      setPercentages(pcts);
+      setAssets(
+        bens.map((b, i) => ({
+          assetDescription: b.assetDescription ?? "",
+          beneficiaryIndex: i,
+          nftContractAddress: "",
+          nftTokenId: "",
+        }))
+      );
+      setAnalyzed(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to analyze will");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  /** Build pipeline ParserOutput from current form state. */
+  function buildParserOutput(
+    wallets: string[],
+    pcts: number[]
+  ): ParserOutput {
+    return {
+      testator_name: null,
+      testator_address: address ?? null,
+      executor_name: null,
+      executor_address: address ?? null,
+      beneficiaries: wallets.map((w, i) => ({
+        name: beneficiaryNames[i]?.trim() ?? "",
+        walletAddress: w.trim() || null,
+        amount: pcts[i] != null ? `${pcts[i]}%` : null,
+      })),
+      assets: assets.map((row) => ({
+        assetDescription: row.assetDescription.trim() || "",
+        beneficiaryWallet:
+          beneficiaries[row.beneficiaryIndex]?.trim() || null,
+        nftContractAddress: row.nftContractAddress?.trim() || null,
+        nftTokenId: row.nftTokenId?.trim() || null,
+      })),
+      conditions: [],
+      additionalInstructions: null,
+    };
+  }
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !valid) return;
     const wallets = beneficiaries.filter((w) => w.trim().length > 0);
     const pcts = percentages.slice(0, wallets.length);
     const check = validateWillFormParams({
-      creator_wallet: creatorWallet,
+      creator_wallet: address ?? "",
       beneficiary_wallets: wallets,
       beneficiary_percentages: pcts,
     });
@@ -113,10 +218,36 @@ export default function CreateWillPage() {
     setLoading(true);
     setError(null);
     try {
-      if (!CONTRACT_ADDRESS) {
-        console.warn("Contract address is not defined in environment variables. We will just test the IPFS upload for now.");
+      const parserOutput = buildParserOutput(wallets, pcts);
+
+      const pipelineRes = await fetch("/api/contract/generate-and-deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parserOutput),
+      });
+      if (!pipelineRes.ok) {
+        const errBody = await pipelineRes.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error ?? pipelineRes.statusText
+        );
       }
-      
+      const pipelineResult = (await pipelineRes.json()) as {
+        contractAddress: string;
+        transactionHash: string;
+        contractName: string;
+      };
+      console.log(
+        "Generated will contract deployed:",
+        pipelineResult.contractAddress,
+        pipelineResult.transactionHash
+      );
+
+      if (!CONTRACT_ADDRESS) {
+        console.warn(
+          "Contract address is not defined in environment variables."
+        );
+      }
+
       let cidStr = "";
       let ivStr = "";
 
@@ -131,12 +262,11 @@ export default function CreateWillPage() {
         });
         if (!uploadRes.ok) {
           const err = await uploadRes.json().catch(() => ({}));
-          throw new Error("Document upload failed: " + (err.error || uploadRes.statusText));
+          throw new Error(
+            "Document upload failed: " + (err.error || uploadRes.statusText)
+          );
         }
         const { cid, iv } = await uploadRes.json();
-        console.log("Success! File uploaded and encrypted to IPFS:");
-        console.log("CID:", cid);
-        console.log("IV:", iv);
         cidStr = cid;
         ivStr = iv;
       }
@@ -147,7 +277,7 @@ export default function CreateWillPage() {
           abi: willRegistryAbi,
           functionName: "createWill",
           args: [
-            creatorWallet.trim() as Address,
+            address,
             wallets.map((w) => w.trim() as Address),
             pcts.map((p) => BigInt(p)),
             cidStr,
@@ -157,7 +287,15 @@ export default function CreateWillPage() {
         console.log("Will created with tx hash:", txHash);
         router.push("/wills");
       } else {
-        alert("IPFS Output:\nCID: " + cidStr + "\nIV: " + ivStr + "\n\n(Smart contract not deployed)");
+        alert(
+          "Pipeline deployed contract: " +
+            pipelineResult.contractAddress +
+            "\n\nIPFS Output:\nCID: " +
+            cidStr +
+            "\nIV: " +
+            ivStr +
+            "\n\n(Smart contract not deployed)"
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create will");
@@ -166,202 +304,288 @@ export default function CreateWillPage() {
     }
   };
 
+  /* ── Guard: not connected ─────────────────────────────────── */
+
   if (!isConnected || !address) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">Connect your wallet to create a will.</p>
-        <Link href="/" className="mt-4 inline-block text-seal hover:underline">
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-500">
+          Connect your wallet to create a will.
+        </p>
+        <Link href="/" className="btn-outlined mt-6 inline-flex">
           ← Back home
         </Link>
       </div>
     );
   }
 
+  /* ── Main render ──────────────────────────────────────────── */
+
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="border-b border-ink-200 bg-parchment/95">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link href="/wills" className="font-semibold text-ink-900">
+      <header className="border-b border-ink-200/60 bg-parchment/95">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link
+            href="/wills"
+            className="text-sm text-ink-500 transition-colors hover:text-ink-900"
+          >
             ← Wills
           </Link>
         </div>
       </header>
-      <main className="mx-auto max-w-xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-ink-900">Create Will</h1>
-        <p className="mt-1 text-ink-600">
-          You are creating this will as <strong>executor</strong>. Enter the will
-          creator wallet and beneficiary wallets (e.g. yours and your brother&apos;s). The will itself only lists real-world assets — here you assign the NFT that represents each asset and who receives it.
+
+      <main className="mx-auto max-w-xl px-6 py-12">
+        <h1 className="font-serif text-2xl font-bold text-ink-950">
+          Create Will
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-ink-500">
+          You are creating this will as{" "}
+          <strong className="text-ink-700">executor</strong>. Upload your
+          will document (PDF) and we&apos;ll analyze it to extract
+          beneficiaries and assets. Then add wallet addresses and NFT
+          details to finalize.
         </p>
-        <form onSubmit={submit} className="mt-8 space-y-6">
+
+        <form onSubmit={submit} className="mt-10 space-y-8">
+          {/* ── Upload ────────────────────────────────────────── */}
           <div>
-            <label className="block text-sm font-medium text-ink-700">
-              Will creator wallet address
-            </label>
-            <input
-              type="text"
-              value={creatorWallet}
-              onChange={(e) => setCreatorWallet(e.target.value)}
-              placeholder="0x..."
-              className="mt-1 w-full rounded-lg border border-ink-300 bg-white px-3 py-2 font-mono text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-ink-700">
-              Will document (PDF, optional)
+            <label className="text-xs font-medium uppercase tracking-wide text-ink-400">
+              Will Document (PDF)
             </label>
             <input
               type="file"
               accept=".pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="mt-1 w-full text-sm text-ink-600"
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setFile(f);
+                if (!f) setAnalyzed(false);
+              }}
+              className="mt-2 block w-full text-sm text-ink-600 file:mr-4 file:rounded-lg file:border-0 file:bg-ink-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink-700 hover:file:bg-ink-200"
             />
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-ink-700">
-                Beneficiaries & allocation (%)
-              </label>
-              <button
-                type="button"
-                onClick={addBeneficiary}
-                className="text-sm text-seal hover:underline"
-              >
-                + Add
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-ink-500">
-              Name/label (e.g. Me, My brother) and wallet for each beneficiary. Total % must equal 100.
+            <p className="mt-1.5 text-xs text-ink-400">
+              Upload first. After analysis you can add beneficiary wallets
+              and NFT assignments.
             </p>
-            <div className="mt-3 space-y-3">
-              {beneficiaries.map((w, i) => (
-                <div key={i} className="space-y-1 rounded-lg border border-ink-200 bg-white/80 p-3">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={beneficiaryNames[i] ?? ""}
-                      onChange={(e) => updateBeneficiaryName(i, e.target.value)}
-                      placeholder="Name (e.g. Me / My brother)"
-                      className="w-48 rounded border border-ink-300 px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={w}
-                      onChange={(e) => updateBeneficiary(i, e.target.value)}
-                      placeholder="Wallet 0x..."
-                      className="min-w-0 flex-1 rounded border border-ink-300 bg-white px-3 py-2 font-mono text-sm"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={percentages[i] ?? 0}
-                      onChange={(e) => updatePercentage(i, Number(e.target.value))}
-                      className="w-20 rounded border border-ink-300 bg-white px-2 py-2 text-sm"
-                    />
-                    <span className="flex items-center text-ink-500">%</span>
-                    <button
-                      type="button"
-                      onClick={() => removeBeneficiary(i)}
-                      className="text-ink-400 hover:text-red-600"
-                      aria-label="Remove"
-                    >
-                      ×
-                    </button>
-                  </div>
+          </div>
+
+          {!analyzed ? (
+            <button
+              type="button"
+              onClick={analyzeWill}
+              disabled={!file || analyzing}
+              className="btn-primary w-full py-3"
+            >
+              {analyzing ? "Analyzing…" : "Analyze Will"}
+            </button>
+          ) : (
+            <>
+              {/* ── Beneficiaries ──────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                    Beneficiaries &amp; Allocation (%)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addBeneficiary}
+                    className="text-sm text-wine transition-colors hover:text-wine/80"
+                  >
+                    + Add
+                  </button>
                 </div>
-              ))}
-            </div>
-            {Math.abs(totalPct - 100) > 0.01 && (
-              <p className="mt-1 text-sm text-amber-700">
-                {validation.error ?? `Total: ${totalPct}% (must be 100%)`}
-              </p>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-medium text-ink-700">
-                Assets from the will
-              </label>
-              <button
-                type="button"
-                onClick={addAsset}
-                className="text-sm text-seal hover:underline"
-              >
-                + Add asset
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-ink-500">
-              List each asset as it appears on the will (IRL only — e.g. &quot;the house&quot;, &quot;the car&quot;). Then assign the NFT that represents it and who receives it.
-            </p>
-            <div className="mt-3 space-y-3">
-              {assets.map((row, i) => (
-                <div key={i} className="space-y-2 rounded-lg border border-ink-200 bg-white/80 p-3">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={row.assetDescription}
-                      onChange={(e) => updateAsset(i, "assetDescription", e.target.value)}
-                      placeholder="Asset from will (IRL) — e.g. the house, the car"
-                      className="min-w-0 flex-1 rounded border border-ink-300 px-3 py-2 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeAsset(i)}
-                      className="text-ink-400 hover:text-red-600"
-                      aria-label="Remove asset"
+                <p className="mt-1 text-xs text-ink-400">
+                  Name and wallet for each beneficiary. Total must equal
+                  100%.
+                </p>
+
+                <div className="mt-4 space-y-3">
+                  {beneficiaries.map((w, i) => (
+                    <div
+                      key={i}
+                      className="card space-y-2 !p-3"
                     >
-                      ×
-                    </button>
-                  </div>
-                  <div className="rounded border border-ink-100 bg-ink-50/50 p-2">
-                    <p className="mb-1.5 text-xs font-medium text-ink-600">
-                      Assign NFT to this asset
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-ink-500">Assign to:</span>
-                      <select
-                        value={row.beneficiaryIndex}
-                        onChange={(e) =>
-                          updateAsset(i, "beneficiaryIndex", Number(e.target.value))
-                        }
-                        className="rounded border border-ink-300 bg-white px-2 py-1.5 text-sm"
-                      >
-                        {beneficiaries.map((wallet, j) => (
-                          <option key={j} value={j}>
-                            {beneficiaryNames[j]?.trim() || `Wallet ${wallet.slice(0, 10)}...` || `Beneficiary ${j + 1}`}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={row.nftContractAddress}
-                        onChange={(e) => updateAsset(i, "nftContractAddress", e.target.value)}
-                        placeholder="NFT contract 0x..."
-                        className="min-w-0 flex-1 rounded border border-ink-300 bg-white px-3 py-1.5 font-mono text-sm"
-                      />
-                      <input
-                        type="text"
-                        value={row.nftTokenId}
-                        onChange={(e) => updateAsset(i, "nftTokenId", e.target.value)}
-                        placeholder="Token ID"
-                        className="w-24 rounded border border-ink-300 bg-white px-2 py-1.5 text-sm"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={beneficiaryNames[i] ?? ""}
+                          onChange={(e) =>
+                            updateBeneficiaryName(i, e.target.value)
+                          }
+                          placeholder="Name"
+                          className="input w-40"
+                        />
+                        <input
+                          type="text"
+                          value={w}
+                          onChange={(e) =>
+                            updateBeneficiary(i, e.target.value)
+                          }
+                          placeholder="Wallet 0x..."
+                          className="input min-w-0 flex-1 font-mono"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={percentages[i] ?? 0}
+                          onChange={(e) =>
+                            updatePercentage(i, Number(e.target.value))
+                          }
+                          className="input w-20"
+                        />
+                        <span className="flex items-center text-ink-400">
+                          %
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeBeneficiary(i)}
+                          className="text-ink-300 transition-colors hover:text-wine"
+                          aria-label="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-          {error && (
-            <p className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>
+                {Math.abs(totalPct - 100) > 0.01 && (
+                  <p className="mt-2 text-sm text-gold">
+                    {validation.error ??
+                      `Total: ${totalPct}% (must be 100%)`}
+                  </p>
+                )}
+              </div>
+
+              {/* ── Assets ────────────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                    Assets from the Will
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addAsset}
+                    className="text-sm text-wine transition-colors hover:text-wine/80"
+                  >
+                    + Add asset
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-ink-400">
+                  List each asset as on the will. Then assign the NFT that
+                  represents it and who receives it.
+                </p>
+
+                <div className="mt-4 space-y-3">
+                  {assets.map((row, i) => (
+                    <div
+                      key={i}
+                      className="card space-y-3 !p-3"
+                    >
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={row.assetDescription}
+                          onChange={(e) =>
+                            updateAsset(
+                              i,
+                              "assetDescription",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Asset — e.g. the house, the car"
+                          className="input min-w-0 flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAsset(i)}
+                          className="text-ink-300 transition-colors hover:text-wine"
+                          aria-label="Remove asset"
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
+                        <p className="mb-2 text-xs font-medium text-ink-400">
+                          Assign NFT to this asset
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-ink-400">
+                            Assign to:
+                          </span>
+                          <select
+                            value={row.beneficiaryIndex}
+                            onChange={(e) =>
+                              updateAsset(
+                                i,
+                                "beneficiaryIndex",
+                                Number(e.target.value)
+                              )
+                            }
+                            className="input py-1.5"
+                          >
+                            {beneficiaries.map((wallet, j) => (
+                              <option key={j} value={j}>
+                                {beneficiaryNames[j]?.trim() ||
+                                  `Wallet ${wallet.slice(0, 10)}...` ||
+                                  `Beneficiary ${j + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={row.nftContractAddress}
+                            onChange={(e) =>
+                              updateAsset(
+                                i,
+                                "nftContractAddress",
+                                e.target.value
+                              )
+                            }
+                            placeholder="NFT contract 0x..."
+                            className="input min-w-0 flex-1 py-1.5 font-mono"
+                          />
+                          <input
+                            type="text"
+                            value={row.nftTokenId}
+                            onChange={(e) =>
+                              updateAsset(
+                                i,
+                                "nftTokenId",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Token ID"
+                            className="input w-24 py-1.5"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Submit ────────────────────────────────────── */}
+              {error && (
+                <p className="rounded-lg bg-wine/5 p-4 text-sm text-wine">
+                  {error}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={!analyzed || !valid || loading}
+                className="btn-wine w-full py-3"
+              >
+                {loading ? "Creating…" : "Create Will"}
+              </button>
+            </>
           )}
-          <button
-            type="submit"
-            disabled={!valid || loading}
-            className="w-full rounded-lg bg-ink-900 py-3 text-white disabled:opacity-50 hover:bg-ink-800"
-          >
-            {loading ? "Creating…" : "Create Will"}
-          </button>
+
+          {error && !analyzed && (
+            <p className="rounded-lg bg-wine/5 p-4 text-sm text-wine">
+              {error}
+            </p>
+          )}
         </form>
       </main>
     </div>

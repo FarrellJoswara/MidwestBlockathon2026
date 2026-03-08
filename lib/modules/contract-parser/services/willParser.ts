@@ -14,7 +14,6 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-import { PDFParse } from "pdf-parse";
 import type { ParsedWill, Beneficiary, AssetType } from "../types/will";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -106,8 +105,10 @@ Will text:
 
 /**
  * Extract plain text from a PDF buffer using pdf-parse (v4 class API).
+ * Dynamic import avoids webpack bundling the worker ("expression too dynamic" error).
  */
 async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: new Uint8Array(pdfBuffer) });
   const result = await parser.getText();
   const text = result.text?.trim();

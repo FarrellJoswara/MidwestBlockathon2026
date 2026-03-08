@@ -9,12 +9,18 @@ import { apiFetch } from "@/lib/modules/api";
 import type { Will, WalletRole } from "@/lib/modules/types";
 
 const ExecutorDashboard = dynamic(
-  () => import("@/components/executor/ExecutorDashboard").then((m) => ({ default: m.ExecutorDashboard })),
-  { loading: () => <p className="text-ink-500">Loading…</p> }
+  () =>
+    import("@/components/executor/ExecutorDashboard").then((m) => ({
+      default: m.ExecutorDashboard,
+    })),
+  { loading: () => <p className="text-ink-400">Loading…</p> }
 );
 const BeneficiaryDashboard = dynamic(
-  () => import("@/components/beneficiary/BeneficiaryDashboard").then((m) => ({ default: m.BeneficiaryDashboard })),
-  { loading: () => <p className="text-ink-500">Loading…</p> }
+  () =>
+    import("@/components/beneficiary/BeneficiaryDashboard").then((m) => ({
+      default: m.BeneficiaryDashboard,
+    })),
+  { loading: () => <p className="text-ink-400">Loading…</p> }
 );
 
 export default function WillDetailPage() {
@@ -31,11 +37,13 @@ export default function WillDetailPage() {
     enabled: !!id && !!address,
   });
 
+  /* ── Guard states ──────────────────────────────────────────── */
+
   if (!isConnected || !address) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">Connect your wallet to view this will.</p>
-        <Link href="/" className="mt-4 inline-block text-seal hover:underline">
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-500">Connect your wallet to view this will.</p>
+        <Link href="/" className="btn-outlined mt-6 inline-flex">
           ← Back home
         </Link>
       </div>
@@ -44,19 +52,21 @@ export default function WillDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">Loading will…</p>
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-400">Loading will…</p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-red-600">
-          {error instanceof Error ? error.message : "Will not found or access denied"}
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-wine">
+          {error instanceof Error
+            ? error.message
+            : "Will not found or access denied"}
         </p>
-        <Link href="/wills" className="mt-4 inline-block text-seal hover:underline">
+        <Link href="/wills" className="btn-outlined mt-6 inline-flex">
           ← Back to Wills
         </Link>
       </div>
@@ -66,45 +76,62 @@ export default function WillDetailPage() {
   const { will, role } = data;
   if (!role) {
     return (
-      <div className="min-h-screen bg-parchment px-4 py-20 text-center">
-        <p className="text-ink-600">You do not have access to this will.</p>
-        <Link href="/wills" className="mt-4 inline-block text-seal hover:underline">
+      <div className="min-h-screen bg-parchment px-6 py-24 text-center">
+        <p className="text-ink-500">You do not have access to this will.</p>
+        <Link href="/wills" className="btn-outlined mt-6 inline-flex">
           ← Back to Wills
         </Link>
       </div>
     );
   }
 
+  /* ── Role badge ────────────────────────────────────────────── */
+  const badgeCls =
+    role === "executor"
+      ? "badge-executor"
+      : role === "beneficiary"
+        ? "badge-beneficiary"
+        : "badge-creator";
+
   return (
     <div className="min-h-screen bg-parchment">
-      <header className="sticky top-0 z-50 border-b border-ink-200 bg-parchment/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link href="/wills" className="font-semibold text-ink-900">
+      <header className="sticky top-0 z-50 border-b border-ink-200/60 bg-parchment/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <Link
+            href="/wills"
+            className="text-sm text-ink-500 transition-colors hover:text-ink-900"
+          >
             ← Wills
           </Link>
-          <span className="rounded bg-ink-200 px-2 py-1 text-xs font-medium text-ink-700">
-            {role}
-          </span>
+          <span className={badgeCls}>{role}</span>
         </div>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-ink-900">Will details</h1>
-        <p className="mt-1 text-ink-600">
-          Creator: {will.creator_wallet.slice(0, 10)}…{will.creator_wallet.slice(-8)}
+
+      <main className="mx-auto max-w-2xl px-6 py-12">
+        <h1 className="font-serif text-2xl font-bold text-ink-950">
+          Will Details
+        </h1>
+        <p className="mt-1 text-sm text-ink-400">
+          Creator: {will.creator_wallet.slice(0, 10)}…
+          {will.creator_wallet.slice(-8)}
         </p>
-        {role === "executor" && <ExecutorDashboard will={will} />}
+
+        <div className="mt-8">
+          {role === "executor" && <ExecutorDashboard will={will} />}
           {role === "beneficiary" && <BeneficiaryDashboard will={will} />}
           {role === "creator" && (
-            <div className="mt-8 rounded-xl border border-ink-200 bg-white/80 p-6">
-              <p className="text-ink-600">
-                You are the will creator. The executor has full management rights.
-                You can view this record for reference.
+            <div className="card">
+              <p className="text-ink-500">
+                You are the will creator. The executor has full management
+                rights. You can view this record for reference.
               </p>
-              <p className="mt-2 text-sm text-ink-500">
-                Status: {will.status}. Executor: {will.executor_wallet.slice(0, 10)}…
+              <p className="mt-3 text-sm text-ink-400">
+                Status: <strong>{will.status}</strong>. Executor:{" "}
+                {will.executor_wallet.slice(0, 10)}…
               </p>
             </div>
           )}
+        </div>
       </main>
     </div>
   );
