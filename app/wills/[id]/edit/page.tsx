@@ -3,21 +3,27 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAccount } from "wagmi";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAccount, useWriteContract } from "wagmi";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/modules/api";
-import type { Will } from "@/lib/modules/types";
+import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import type { Will, WillPool } from "@/lib/modules/types";
+import { type Address } from "viem";
+
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
 export default function EditWillPage() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
-  const [beneficiaries, setBeneficiaries] = useState<string[]>([]);
-  const [percentages, setPercentages] = useState<number[]>([]);
+  const [pools, setPools] = useState<WillPool[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["will", id, address],
     queryFn: () =>
       apiFetch(`/api/wills/${id}`, { wallet: address ?? undefined }) as Promise<{
@@ -28,36 +34,68 @@ export default function EditWillPage() {
   });
 
   useEffect(() => {
-    if (data?.will) {
-      setBeneficiaries(data.will.beneficiary_wallets);
-      setPercentages(data.will.beneficiary_percentages);
+    if (data?.will?.pools?.length) {
+      setPools(data.will.pools);
+    } else if (data?.will?.beneficiary_wallets?.length) {
+      setPools([
+        {
+          name: "Estate",
+          beneficiary_wallets: data.will.beneficiary_wallets,
+          beneficiary_percentages: data.will.beneficiary_percentages,
+        },
+      ]);
     }
   }, [data?.will]);
 
-  const updateMutation = useMutation({
-    mutationFn: (body: { beneficiary_wallets: string[]; beneficiary_percentages: number[] }) =>
-      apiFetch(`/api/wills/${id}/update`, {
-        method: "PATCH",
-        wallet: address ?? undefined,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    onSuccess: () => {
+  const updatePoolWallets = (poolIndex: number, walletIndex: number, value: string) => {
+    setPools((prev) =>
+      prev.map((p, i) =>
+        i === poolIndex
+          ? {
+              ...p,
+              beneficiary_wallets: [
+                ...p.beneficiary_wallets.slice(0, walletIndex),
+                value,
+                ...p.beneficiary_wallets.slice(walletIndex + 1),
+              ],
+            }
+          : p
+      )
+    );
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!address || !data?.will || pools.length === 0 || !CONTRACT_ADDRESS) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const poolNames = pools.map((p) => p.name);
+      const poolWallets = pools.map((p) =>
+        p.beneficiary_wallets.map((w) => w.trim() as Address)
+      );
+      const poolPercentages = pools.map((p) => p.beneficiary_percentages.map((n) => BigInt(n)));
+      await writeContractAsync({
+        address: CONTRACT_ADDRESS,
+        abi: willRegistryAbi,
+        functionName: "updateWill",
+        args: [
+          BigInt(id),
+          poolNames,
+          poolWallets,
+          poolPercentages,
+          data.will.ipfs_cid ?? "",
+          data.will.encrypted_doc_key_iv ?? "",
+          0,
+        ],
+      });
       queryClient.invalidateQueries({ queryKey: ["will", id, address] });
       router.push(`/wills/${id}`);
-    },
-  });
-
-  const totalPct = percentages.reduce((s, p) => s + p, 0);
-  const valid = Math.abs(totalPct - 100) < 0.01;
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valid) return;
-    updateMutation.mutate({
-      beneficiary_wallets: beneficiaries,
-      beneficiary_percentages: percentages,
-    });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!isConnected || !address) {
@@ -106,58 +144,47 @@ export default function EditWillPage() {
         <h1 className="font-serif text-2xl font-bold text-ink-950">
           Edit Beneficiaries
         </h1>
+        <p className="mt-1 text-sm text-ink-500">
+          You can update wallet addresses only. Allocation percentages are set by the will and cannot be changed.
+        </p>
         <form onSubmit={submit} className="mt-10 space-y-6">
-          <div className="space-y-3">
-            {beneficiaries.map((w, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  type="text"
-                  value={w}
-                  onChange={(e) =>
-                    setBeneficiaries((b) => [
-                      ...b.slice(0, i),
-                      e.target.value,
-                      ...b.slice(i + 1),
-                    ])
-                  }
-                  className="input min-w-0 flex-1 font-mono"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={percentages[i] ?? 0}
-                  onChange={(e) =>
-                    setPercentages((p) => [
-                      ...p.slice(0, i),
-                      Number(e.target.value),
-                      ...p.slice(i + 1),
-                    ])
-                  }
-                  className="input w-20"
-                />
-                <span className="flex items-center text-ink-400">%</span>
+          <div className="space-y-6">
+            {pools.map((pool, poolIndex) => (
+              <div key={poolIndex} className="card space-y-2 !p-4">
+                <p className="text-sm font-medium text-ink-700">{pool.name}</p>
+                <div className="space-y-2">
+                  {pool.beneficiary_wallets.map((w, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={w}
+                        onChange={(e) =>
+                          updatePoolWallets(poolIndex, i, e.target.value)
+                        }
+                        placeholder="Wallet 0x..."
+                        className="input min-w-0 flex-1 font-mono"
+                      />
+                      <span
+                        className="inline-flex h-10 min-w-[5rem] items-center rounded-lg border border-ink-200 bg-ink-50 px-3 text-sm text-ink-600"
+                        aria-label="Percentage (read-only)"
+                      >
+                        {pool.beneficiary_percentages[i] ?? 0}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
-          {Math.abs(totalPct - 100) > 0.01 && (
-            <p className="text-sm text-gold">
-              Total: {totalPct}% (must be 100%)
-            </p>
-          )}
-          {updateMutation.error && (
-            <p className="text-sm text-wine">
-              {updateMutation.error instanceof Error
-                ? updateMutation.error.message
-                : "Update failed"}
-            </p>
+          {error && (
+            <p className="text-sm text-wine">{error}</p>
           )}
           <button
             type="submit"
-            disabled={!valid || updateMutation.isPending}
+            disabled={saving}
             className="btn-primary w-full py-3"
           >
-            {updateMutation.isPending ? "Saving…" : "Save"}
+            {saving ? "Saving…" : "Save"}
           </button>
         </form>
       </main>

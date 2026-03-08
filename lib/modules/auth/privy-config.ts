@@ -13,7 +13,7 @@ export const privyConfig: PrivyClientConfig = {
   supportedChains: [xrplEvmTestnet, xrplEvmMainnet],
   defaultChain: xrplEvmTestnet,
   embeddedWallets: {
-    createOnLogin: "users-without-wallets",
+    createOnLogin: "all-users",
     requireUserPasswordOnCreate: false,
     showWalletUIs: true,
   },

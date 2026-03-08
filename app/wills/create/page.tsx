@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount, useWriteContract, useDeployContract, usePublicClient, useChainId, useSwitchChain } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { validateWillFormParams } from "@/lib/modules/ui";
 import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import { xrplEvmMainnet, xrplEvmTestnet } from "@/lib/modules/chain/chains";
+import { generateContractFromParserDataClient } from "@/lib/modules/contract-generator/client-generate";
+import { compileContractClient } from "@/lib/modules/contract-generator/client-compile";
 import type { ParserOutput } from "@/lib/modules/contract-generator/types";
 import type { ParsedWill } from "@/lib/modules/contract-parser/types/will";
 import { type Address } from "viem";
@@ -24,6 +27,10 @@ interface AssetRow {
 export default function CreateWillPage() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const { deployContractAsync } = useDeployContract();
+  const publicClient = usePublicClient();
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
@@ -203,6 +210,7 @@ export default function CreateWillPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address || !valid) return;
+    console.log("[CreateWill] Step 1: Submit started, validating...");
     const wallets = beneficiaries.filter((w) => w.trim().length > 0);
     const pcts = percentages.slice(0, wallets.length);
     const check = validateWillFormParams({
@@ -215,36 +223,73 @@ export default function CreateWillPage() {
       setLoading(false);
       return;
     }
+    console.log("[CreateWill] Step 2: Validation OK, building parser output");
     setLoading(true);
     setError(null);
     try {
       const parserOutput = buildParserOutput(wallets, pcts);
-
-      const pipelineRes = await fetch("/api/contract/generate-and-deploy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parserOutput),
+      console.log("[CreateWill] Step 3a: Generating contract (client)...", {
+        beneficiaries: parserOutput.beneficiaries?.length,
+        assets: parserOutput.assets?.length,
       });
-      if (!pipelineRes.ok) {
-        const errBody = await pipelineRes.json().catch(() => ({}));
-        throw new Error(
-          (errBody as { error?: string }).error ?? pipelineRes.statusText
-        );
+
+      const generated = await generateContractFromParserDataClient(parserOutput);
+      console.log("[CreateWill] Step 3a OK: Got source, compiling (client)...");
+
+      const compiled = await compileContractClient(generated);
+      console.log("[CreateWill] Step 3b OK: Got bytecode/abi, deploying with your wallet (Privy)...");
+
+      const xrplTestnetId = xrplEvmTestnet.id;
+      if (chainId !== xrplTestnetId && switchChainAsync) {
+        try {
+          await switchChainAsync({ chainId: xrplTestnetId });
+        } catch (err) {
+          throw new Error(
+            "Please switch to XRPL EVM Testnet in your wallet to deploy. Current chain is not supported."
+          );
+        }
       }
-      const pipelineResult = (await pipelineRes.json()) as {
-        contractAddress: string;
-        transactionHash: string;
-        contractName: string;
-      };
+
+      const txHash = await deployContractAsync({
+        abi: compiled.abi,
+        bytecode: compiled.bytecode as `0x${string}`,
+        chainId: xrplTestnetId,
+      });
+      if (!txHash) {
+        throw new Error("Deployment did not return a transaction hash.");
+      }
+      if (!publicClient) {
+        throw new Error("Cannot wait for receipt: public client not available.");
+      }
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      const contractAddress = receipt.contractAddress;
+      if (!contractAddress) {
+        throw new Error("Deployment receipt did not contain a contract address.");
+      }
+      const explorerBase =
+        chainId === xrplEvmMainnet.id
+          ? xrplEvmMainnet.blockExplorers?.default.url
+          : xrplEvmTestnet.blockExplorers?.default.url;
+      const explorerUrl = explorerBase ?? "https://explorer.testnet.xrplevm.org";
+      const contractUrl = `${explorerUrl}/address/${contractAddress}`;
+      const txUrl = `${explorerUrl}/tx/${txHash}`;
+      console.log("[CreateWill] Step 4: Deployed with your wallet", {
+        contractAddress,
+        transactionHash: txHash,
+        contractName: compiled.contractName,
+      });
       console.log(
-        "Generated will contract deployed:",
-        pipelineResult.contractAddress,
-        pipelineResult.transactionHash
+        "[CreateWill] View contract (click to open):",
+        contractUrl
+      );
+      console.log(
+        "[CreateWill] View transaction (click to open):",
+        txUrl
       );
 
       if (!CONTRACT_ADDRESS) {
         console.warn(
-          "Contract address is not defined in environment variables."
+          "[CreateWill] WillRegistry not configured (NEXT_PUBLIC_WILL_REGISTRY_ADDRESS missing)."
         );
       }
 
@@ -252,6 +297,7 @@ export default function CreateWillPage() {
       let ivStr = "";
 
       if (file) {
+        console.log("[CreateWill] Step 5: Uploading file to IPFS...");
         const form = new FormData();
         form.append("file", file);
         form.append("will_id", "pending");
@@ -269,35 +315,42 @@ export default function CreateWillPage() {
         const { cid, iv } = await uploadRes.json();
         cidStr = cid;
         ivStr = iv;
+        console.log("[CreateWill] Step 5 OK: IPFS", { cid, iv });
+      } else {
+        console.log("[CreateWill] Step 5: No file, skipping IPFS");
       }
 
       if (CONTRACT_ADDRESS) {
+        console.log("[CreateWill] Step 6: Calling WillRegistry.createWill...");
         const txHash = await writeContractAsync({
           address: CONTRACT_ADDRESS,
           abi: willRegistryAbi,
           functionName: "createWill",
           args: [
             address,
-            wallets.map((w) => w.trim() as Address),
-            pcts.map((p) => BigInt(p)),
+            ["Allocation"],
+            [wallets.map((w) => w.trim() as Address)],
+            [pcts.map((p) => BigInt(p))],
             cidStr,
             ivStr,
           ],
         });
-        console.log("Will created with tx hash:", txHash);
+        console.log("[CreateWill] Step 7: Will created, redirecting to /wills", { txHash });
         router.push("/wills");
       } else {
+        console.log("[CreateWill] Step 6/7: No registry — showing alert only");
         alert(
-          "Pipeline deployed contract: " +
-            pipelineResult.contractAddress +
+          "Will contract deployed with your wallet: " +
+            contractAddress +
             "\n\nIPFS Output:\nCID: " +
             cidStr +
             "\nIV: " +
             ivStr +
-            "\n\n(Smart contract not deployed)"
+            "\n\n(WillRegistry not configured; contract address not recorded on-chain.)"
         );
       }
     } catch (err) {
+      console.error("[CreateWill] Error:", err instanceof Error ? err.message : err);
       setError(err instanceof Error ? err.message : "Failed to create will");
     } finally {
       setLoading(false);

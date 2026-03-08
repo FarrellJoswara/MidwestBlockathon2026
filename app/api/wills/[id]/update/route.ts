@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWalletFromRequest, getWillWithRole } from "@/lib/modules/auth";
 import { updateWill } from "@/lib/modules/chain";
+import type { WillPool } from "@/lib/modules/types";
 
 function parseBody(body: unknown): {
+  pools?: WillPool[];
   beneficiary_wallets?: string[];
   beneficiary_percentages?: number[];
   ipfs_cid?: string | null;
@@ -10,6 +12,30 @@ function parseBody(body: unknown): {
 } | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
+  const ipfs_cid = typeof b.ipfs_cid === "string" ? b.ipfs_cid : undefined;
+  const encrypted_doc_key_iv =
+    typeof b.encrypted_doc_key_iv === "string" ? b.encrypted_doc_key_iv : undefined;
+
+  if (Array.isArray(b.pools) && b.pools.length > 0) {
+    const pools = b.pools as unknown[];
+    const valid: WillPool[] = [];
+    for (const p of pools) {
+      if (!p || typeof p !== "object") return null;
+      const po = p as Record<string, unknown>;
+      const name = typeof po.name === "string" ? po.name : "Fund";
+      const wallets = Array.isArray(po.beneficiary_wallets)
+        ? (po.beneficiary_wallets as string[]).filter((x) => typeof x === "string")
+        : [];
+      const pcts = Array.isArray(po.beneficiary_percentages)
+        ? (po.beneficiary_percentages as number[]).filter((x) => typeof x === "number")
+        : [];
+      if (wallets.length === 0 || wallets.length !== pcts.length) return null;
+      if (Math.abs(pcts.reduce((s, n) => s + n, 0) - 100) > 0.01) return null;
+      valid.push({ name, beneficiary_wallets: wallets, beneficiary_percentages: pcts });
+    }
+    return { pools: valid, ipfs_cid, encrypted_doc_key_iv };
+  }
+
   const beneficiaries = Array.isArray(b.beneficiary_wallets)
     ? (b.beneficiary_wallets as string[]).filter((x) => typeof x === "string")
     : undefined;
@@ -18,9 +44,6 @@ function parseBody(body: unknown): {
     : undefined;
   if (beneficiaries && percentages && beneficiaries.length !== percentages.length) return null;
   if (percentages && Math.abs(percentages.reduce((s, p) => s + p, 0) - 100) > 0.01) return null;
-  const ipfs_cid = typeof b.ipfs_cid === "string" ? b.ipfs_cid : undefined;
-  const encrypted_doc_key_iv =
-    typeof b.encrypted_doc_key_iv === "string" ? b.encrypted_doc_key_iv : undefined;
   return {
     beneficiary_wallets: beneficiaries,
     beneficiary_percentages: percentages,
@@ -60,13 +83,14 @@ export async function PATCH(
   const parsed = parseBody(body);
   if (
     !parsed ||
-    (!parsed.beneficiary_wallets &&
+    (!parsed.pools &&
+      !parsed.beneficiary_wallets &&
       !parsed.beneficiary_percentages &&
       parsed.ipfs_cid === undefined &&
       parsed.encrypted_doc_key_iv === undefined)
   ) {
     return NextResponse.json(
-      { error: "Provide at least one: beneficiary_wallets/percentages, or ipfs_cid+encrypted_doc_key_iv" },
+      { error: "Provide at least one: pools, beneficiary_wallets/percentages, or ipfs_cid+encrypted_doc_key_iv" },
       { status: 400 }
     );
   }

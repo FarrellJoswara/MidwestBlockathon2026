@@ -77,9 +77,9 @@ The JSON must match this exact schema:
     {
       "name": "string — full legal name of the beneficiary",
       "placeholderId": "string — lowercase_underscored version of name",
-      "assetDescription": "string — description of the bequeathed asset",
+      "assetDescription": "string — SHORT intuitive label (see rules below). Never copy long legal phrases.",
       "assetType": "one of: CASH, PROPERTY, VEHICLE, PERSONAL_ITEM, OTHER",
-      "amount": "string or null — dollar amount, percentage, or descriptive quantity"
+      "amount": "string or null — ONLY use for percentage share of estate/residue: the number with or without % (e.g. \"50\", \"50%\", \"25%\"). For specific dollar amounts or items leave null and put the description in assetDescription"
     }
   ],
   "conditions": ["string — any conditions for distribution"],
@@ -88,15 +88,23 @@ The JSON must match this exact schema:
 
 Rules:
 - If a field is not found in the document, set it to null or omit it.
+- **amount**: Use ONLY when the will specifies a percentage share (e.g. \"50% of my estate\", \"one-third\"). Output the number as \"50\", \"33\", or \"50%\". Do NOT put dollar amounts here (e.g. \"$10,000\" or \"10k\" must not go in amount — put them in assetDescription and set amount to null).
 - For assetType, classify as:
-    • CASH — money, bank accounts, dollar amounts, savings, financial accounts
+    • CASH — money, bank accounts, dollar amounts, savings, financial accounts (use for percentage shares of residue and for cash bequests)
     • PROPERTY — real estate, houses, land, buildings
     • VEHICLE — cars, trucks, boats, motorcycles
     • PERSONAL_ITEM — jewelry, art, furniture, electronics, heirlooms, collectibles
     • OTHER — anything that does not fit the above categories
-- Extract ALL beneficiaries mentioned.
+- Extract ALL beneficiaries and ALL bequests. One row per distinct bequest (e.g. one row for \"Alice gets 50%\" and another for \"Alice gets the house\").
 - Do NOT include any wallet addresses — they will be resolved later.
 - Ignore boilerplate legal language unrelated to asset distribution.
+- **assetDescription — keep it SHORT and intuitive.** Do NOT copy long legal wording. Do NOT include addresses in the label. Use these patterns:
+  • Real estate / residence: \"Home\", \"Property\", or \"Residence\" — do not add the street address or city.
+  • Vehicles: \"Vehicle: [make/model]\" or \"Car: [year make model]\" (e.g. \"Vehicle: 2016 Honda Accord\").
+  • Cash: \"$X from [source]\" or \"$X savings\" (e.g. \"$10,000 from bank\", \"5k from savings\").
+  • Personal items: \"Jewelry\", \"Art collection\", \"Furniture\", \"Electronics\" — one short phrase, not a sentence.
+  • Percentage shares: \"Residuary share\" or \"Estate share\".
+  Keep labels to a few words; never include full addresses in assetDescription.
 
 Will text:
 `;
@@ -230,7 +238,7 @@ export async function parseWillWithGemini(
   console.log("[willParser] Sending will text to Gemini for analysis...");
   const ai = getGeminiClient();
   const result = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.1-flash-lite-preview",
     contents: fullPrompt,
   });
   let responseText = result.text?.trim() ?? "";

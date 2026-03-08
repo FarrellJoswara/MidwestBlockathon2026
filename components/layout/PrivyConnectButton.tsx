@@ -1,11 +1,26 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAccount } from "wagmi";
 
 export function PrivyConnectButton() {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { address } = useAccount();
+  const [copied, setCopied] = useState(false);
+
+  const fullAddress = address ?? user?.wallet?.address ?? "";
+  const displayAddress = fullAddress
+    ? `${fullAddress.slice(0, 6)}…${fullAddress.slice(-4)}`
+    : "Connected";
+
+  const copyAddress = useCallback(() => {
+    if (!fullAddress) return;
+    navigator.clipboard.writeText(fullAddress).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [fullAddress]);
 
   if (!ready) {
     return (
@@ -27,17 +42,16 @@ export function PrivyConnectButton() {
     );
   }
 
-  const displayAddress = address
-    ? `${address.slice(0, 6)}…${address.slice(-4)}`
-    : user?.wallet?.address
-      ? `${user.wallet.address.slice(0, 6)}…${user.wallet.address.slice(-4)}`
-      : "Connected";
-
   return (
     <div className="flex items-center gap-2">
-      <span className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 font-mono text-xs text-ink-600">
-        {displayAddress}
-      </span>
+      <button
+        type="button"
+        onClick={copyAddress}
+        title={fullAddress || "Copy address"}
+        className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 font-mono text-xs text-ink-600 transition-colors hover:border-ink-300 hover:bg-ink-50 active:bg-ink-100 cursor-pointer"
+      >
+        {copied ? "Copied!" : displayAddress}
+      </button>
       <button
         type="button"
         onClick={logout}

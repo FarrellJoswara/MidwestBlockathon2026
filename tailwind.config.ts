@@ -11,6 +11,15 @@ const config: Config = {
         serif: ["var(--font-serif)", "Georgia", "serif"],
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
       },
+      keyframes: {
+        "progress-indeterminate": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(350%)" },
+        },
+      },
+      animation: {
+        "progress-indeterminate": "progress-indeterminate 1.2s ease-in-out infinite",
+      },
       colors: {
         ink: {
           50: "#f6f5f2",
