@@ -62,7 +62,10 @@ export async function compileContract(
   if (output.errors?.length) {
     const messages = output.errors
       .filter((e): e is typeof e & { severity: string } => e.severity === "error")
-      .map((e) => e.formattedMessage ?? e.message);
+      .map((e) => {
+        const msg = e.formattedMessage ?? e.message ?? "Unknown compilation error";
+        return msg.length > 1000 ? msg.slice(0, 1000) + "...\n[Error Truncated]" : msg;
+      });
     if (messages.length) {
       throw new Error(`Compilation failed:\n${messages.join("\n")}`);
     }

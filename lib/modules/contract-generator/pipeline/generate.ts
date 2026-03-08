@@ -66,8 +66,20 @@ ${buildDeclareDeathRequirements()}
 
 /** Strip markdown code fence if present and return raw Solidity source. */
 function extractSoliditySource(raw: string): string {
-  const fenceMatch = raw.match(/```(?:solidity)?\s*([\s\S]*?)```/);
-  if (fenceMatch) return fenceMatch[1].trim();
+  const startIdx = raw.indexOf("```solidity");
+  if (startIdx !== -1) {
+    const endIdx = raw.indexOf("```", startIdx + 11);
+    if (endIdx !== -1) {
+      return raw.slice(startIdx + 11, endIdx).trim();
+    }
+  }
+  const genericStartIdx = raw.indexOf("```");
+  if (genericStartIdx !== -1) {
+    const genericEndIdx = raw.indexOf("```", genericStartIdx + 3);
+    if (genericEndIdx !== -1) {
+      return raw.slice(genericStartIdx + 3, genericEndIdx).trim();
+    }
+  }
   return raw.trim();
 }
 
