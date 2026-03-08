@@ -39,11 +39,11 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
         },
         body: JSON.stringify({ txHash }),
       }),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["will", will.id, address] });
-        setDeclareConfirm(false);
-      },
-    });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["will", will.id, address] });
+      setDeclareConfirm(false);
+    },
+  });
 
   const distribute = useMutation({
     mutationFn: () =>
@@ -62,7 +62,6 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
       declareDeathSync.mutate(declareDeathHash);
     }
   }, [isSuccess, declareDeathHash, declareDeathSync]);
-
 
   const downloadDoc = () => {
     if (!will.ipfs_cid || !will.encrypted_doc_key_iv || !address) return;
@@ -85,137 +84,161 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
       .finally(() => a.remove());
   };
 
+  /* ── Status display ──────────────────────────────────────── */
+  const statusColor =
+    will.status === "active"
+      ? "text-emerald"
+      : will.status === "death_declared"
+        ? "text-gold"
+        : "text-ink-500";
+
   return (
-    <div className="space-y-8">
-      <section className="rounded-xl border border-ink-200 bg-white/80 p-6">
-        <h2 className="text-lg font-semibold text-ink-900">Will information</h2>
-        <dl className="mt-4 grid gap-2 text-sm">
+    <div className="space-y-6">
+      {/* ── Will info ──────────────────────────────────────── */}
+      <section className="card">
+        <h2 className="font-serif text-lg font-semibold text-ink-900">
+          Will Information
+        </h2>
+        <dl className="mt-5 grid gap-4 text-sm">
           <div>
-            <dt className="text-ink-500">Creator wallet</dt>
-            <dd className="font-mono text-ink-900">{will.creator_wallet}</dd>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-400">
+              Creator
+            </dt>
+            <dd className="mt-0.5 font-mono text-ink-800">
+              {will.creator_wallet}
+            </dd>
           </div>
           <div>
-            <dt className="text-ink-500">Executor (you)</dt>
-            <dd className="font-mono text-ink-900">{will.executor_wallet}</dd>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-400">
+              Executor (you)
+            </dt>
+            <dd className="mt-0.5 font-mono text-ink-800">
+              {will.executor_wallet}
+            </dd>
           </div>
           <div>
-            <dt className="text-ink-500">Status</dt>
-            <dd>
-              <span
-                className={
-                  will.status === "active"
-                    ? "text-green-700"
-                    : will.status === "death_declared"
-                      ? "text-amber-700"
-                      : "text-ink-600"
-                }
-              >
-                {will.status}
-              </span>
+            <dt className="text-xs font-medium uppercase tracking-wide text-ink-400">
+              Status
+            </dt>
+            <dd className={`mt-0.5 font-medium ${statusColor}`}>
+              {will.status}
             </dd>
           </div>
         </dl>
       </section>
 
-      <section className="rounded-xl border border-ink-200 bg-white/80 p-6">
-        <h2 className="text-lg font-semibold text-ink-900">Document</h2>
+      {/* ── Document ───────────────────────────────────────── */}
+      <section className="card">
+        <h2 className="font-serif text-lg font-semibold text-ink-900">
+          Document
+        </h2>
         {will.ipfs_cid ? (
           <div className="mt-4 flex items-center gap-4">
-            <p className="text-sm text-ink-600">Stored on IPFS (encrypted)</p>
-            <button
-              type="button"
-              onClick={downloadDoc}
-              className="rounded bg-ink-200 px-3 py-1.5 text-sm hover:bg-ink-300"
-            >
+            <p className="text-sm text-ink-500">Stored on IPFS (encrypted)</p>
+            <button type="button" onClick={downloadDoc} className="btn-outlined text-xs">
               Download PDF
             </button>
           </div>
         ) : (
-          <p className="mt-4 text-sm text-ink-500">No document uploaded yet.</p>
+          <p className="mt-4 text-sm text-ink-400">No document uploaded yet.</p>
         )}
-        <p className="mt-2 text-xs text-ink-400">
-          To upload a new version, update the will from the create flow or a future
-          "Replace document" action.
+        <p className="mt-3 text-xs text-ink-400">
+          To upload a new version, update the will from the create flow or a
+          future &ldquo;Replace document&rdquo; action.
         </p>
       </section>
 
-      <section className="rounded-xl border border-ink-200 bg-white/80 p-6">
-        <h2 className="text-lg font-semibold text-ink-900">Beneficiaries</h2>
-        <ul className="mt-4 space-y-2">
+      {/* ── Beneficiaries ──────────────────────────────────── */}
+      <section className="card">
+        <h2 className="font-serif text-lg font-semibold text-ink-900">
+          Beneficiaries
+        </h2>
+        <ul className="mt-4 divide-y divide-ink-100">
           {will.beneficiary_wallets.map((w, i) => (
-            <li key={w} className="flex justify-between text-sm">
-              <span className="font-mono text-ink-800">{w}</span>
-              <span className="text-ink-600">{will.beneficiary_percentages[i]}%</span>
+            <li key={w} className="flex justify-between py-2.5 text-sm">
+              <span className="font-mono text-ink-700">{w}</span>
+              <span className="font-medium text-ink-500">
+                {will.beneficiary_percentages[i]}%
+              </span>
             </li>
           ))}
         </ul>
         <Link
           href={`/wills/${will.id}/edit`}
-          className="mt-4 inline-block text-sm text-seal hover:underline"
+          className="mt-4 inline-block text-sm text-wine transition-colors hover:text-wine/80"
         >
-          Edit beneficiaries (when status is active)
+          Edit beneficiaries →
         </Link>
       </section>
 
+      {/* ── Declare death ──────────────────────────────────── */}
       {will.status === "active" && (
-        <section className="rounded-xl border border-red-200 bg-red-50/50 p-6">
-          <h2 className="text-lg font-semibold text-ink-900">Declare death</h2>
-          <p className="mt-2 text-sm text-ink-600">
-            Once the will creator is declared deceased, beneficiaries can see estate
-            info and you can execute distribution.
+        <section className="card border-wine/20">
+          <h2 className="font-serif text-lg font-semibold text-ink-900">
+            Declare Death
+          </h2>
+          <p className="mt-2 text-sm text-ink-500">
+            Once the will creator is declared deceased, beneficiaries can see
+            estate info and you can execute distribution.
           </p>
           {!declareConfirm ? (
             <button
-            type="button"
-            onClick={() => setDeclareConfirm(true)}
-            className="mt-4 rounded-lg border border-seal bg-white px-4 py-2 text-seal hover:bg-seal/10"
-          >
-            I confirm: Declare death
-          </button>
-        ) : (
-          <div className="mt-4 flex gap-2">
-            <button
               type="button"
-              onClick={() => declareDeathOnChain(BigInt(will.id))}
-              disabled={isWritePending || isConfirming || declareDeathSync.isPending}
-              className="rounded-lg bg-seal px-4 py-2 text-white hover:bg-seal/90 disabled:opacity-50"
+              onClick={() => setDeclareConfirm(true)}
+              className="btn-outlined mt-4 border-wine/30 text-wine hover:bg-wine/5"
             >
-              {isWritePending
-                ? "Confirm in Wallet…"
-                : isConfirming
-                  ? "Waiting for Confirmation…"
-                  : declareDeathSync.isPending
-                    ? "Syncing…"
-                    : "Confirm"}
+              I confirm: Declare death
             </button>
-            <button
-              type="button"
-              onClick={() => setDeclareConfirm(false)}
-              className="rounded-lg border border-ink-300 px-4 py-2 hover:bg-ink-100"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-        {declareDeathError && (
-          <p className="mt-3 text-sm text-red-600">{declareDeathError.message}</p>
-        )}
+          ) : (
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => declareDeathOnChain(BigInt(will.id))}
+                disabled={
+                  isWritePending || isConfirming || declareDeathSync.isPending
+                }
+                className="btn-wine disabled:opacity-50"
+              >
+                {isWritePending
+                  ? "Confirm in Wallet…"
+                  : isConfirming
+                    ? "Waiting for Confirmation…"
+                    : declareDeathSync.isPending
+                      ? "Syncing…"
+                      : "Confirm"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeclareConfirm(false)}
+                className="btn-outlined"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {declareDeathError && (
+            <p className="mt-3 text-sm text-wine">
+              {declareDeathError.message}
+            </p>
+          )}
         </section>
       )}
 
+      {/* ── Execute distribution ───────────────────────────── */}
       {will.status === "death_declared" && (
-        <section className="rounded-xl border border-ink-200 bg-white/80 p-6">
-          <h2 className="text-lg font-semibold text-ink-900">Execute distribution</h2>
-          <p className="mt-2 text-sm text-ink-600">
+        <section className="card">
+          <h2 className="font-serif text-lg font-semibold text-ink-900">
+            Execute Distribution
+          </h2>
+          <p className="mt-2 text-sm text-ink-500">
             Trigger the distribution of assets from the creator wallet to
-            beneficiaries (MVP: placeholder; real implementation would sign
-            transactions).
+            beneficiaries.
           </p>
           {!distributeConfirm ? (
             <button
               type="button"
               onClick={() => setDistributeConfirm(true)}
-              className="mt-4 rounded-lg bg-ink-900 px-4 py-2 text-white hover:bg-ink-800"
+              className="btn-primary mt-4"
             >
               Execute distribution
             </button>
@@ -225,14 +248,14 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
                 type="button"
                 onClick={() => distribute.mutate()}
                 disabled={distribute.isPending}
-                className="rounded-lg bg-ink-900 px-4 py-2 text-white hover:bg-ink-800 disabled:opacity-50"
+                className="btn-primary disabled:opacity-50"
               >
                 {distribute.isPending ? "Processing…" : "Confirm"}
               </button>
               <button
                 type="button"
                 onClick={() => setDistributeConfirm(false)}
-                className="rounded-lg border border-ink-300 px-4 py-2 hover:bg-ink-100"
+                className="btn-outlined"
               >
                 Cancel
               </button>
@@ -241,10 +264,13 @@ export function ExecutorDashboard({ will }: ExecutorDashboardProps) {
         </section>
       )}
 
+      {/* ── Executed state ─────────────────────────────────── */}
       {will.status === "executed" && (
-        <p className="rounded-xl border border-ink-200 bg-ink-50 p-4 text-sm text-ink-700">
-          Distribution has been executed. No further actions available.
-        </p>
+        <div className="card bg-ink-50/50">
+          <p className="text-sm text-ink-500">
+            Distribution has been executed. No further actions available.
+          </p>
+        </div>
       )}
     </div>
   );

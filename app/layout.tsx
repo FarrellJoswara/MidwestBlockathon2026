@@ -1,16 +1,24 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Playfair_Display, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
 import ClientProviders from "./ClientProviders";
 
-const inter = Inter({
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  display: "swap",
+});
+
+const sourceSans = Source_Sans_3({
   subsets: ["latin"],
   variable: "--font-sans",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "dihhapp | Digital Will Distribution",
-  description: "Manage digital wills and inheritance distribution on blockchain",
+  title: "dihhapp — Digital Inheritance & Will Distribution",
+  description:
+    "Secure, on-chain will management. Upload your will, designate beneficiaries, and let executors handle distribution — all without storing your keys.",
 };
 
 export default function RootLayout({
@@ -20,7 +28,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="scroll-smooth">
-      <body className={`${inter.variable} font-sans`} style={{ backgroundColor: "#faf8f4", color: "#1f1d1b" }}>
+      <body
+        className={`${playfair.variable} ${sourceSans.variable} font-sans`}
+        style={{ backgroundColor: "#faf8f4", color: "#1f1d1b" }}
+      >
         <ClientProviders>{children}</ClientProviders>
       </body>
     </html>

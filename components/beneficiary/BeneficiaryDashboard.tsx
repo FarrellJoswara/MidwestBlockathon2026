@@ -11,28 +11,40 @@ export function BeneficiaryDashboard({ will }: BeneficiaryDashboardProps) {
   const { address } = useAccount();
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-xl border border-ink-200 bg-white/80 p-6">
-        <h2 className="text-lg font-semibold text-ink-900">Your allocation</h2>
-        <ul className="mt-4 space-y-2">
+    <div className="space-y-6">
+      {/* ── Allocation ─────────────────────────────────────── */}
+      <section className="card">
+        <h2 className="font-serif text-lg font-semibold text-ink-900">
+          Your Allocation
+        </h2>
+        <ul className="mt-4 divide-y divide-ink-100">
           {will.beneficiary_wallets.map((w, i) => (
-            <li key={w} className="flex justify-between text-sm">
-              <span className="font-mono text-ink-800">
-                {address?.toLowerCase() === w.toLowerCase() ? "You" : w}
+            <li key={w} className="flex justify-between py-2.5 text-sm">
+              <span className="font-mono text-ink-700">
+                {address?.toLowerCase() === w.toLowerCase() ? (
+                  <span className="font-sans font-medium text-wine">You</span>
+                ) : (
+                  w
+                )}
               </span>
-              <span className="text-ink-600">{will.beneficiary_percentages[i]}%</span>
+              <span className="font-medium text-ink-500">
+                {will.beneficiary_percentages[i]}%
+              </span>
             </li>
           ))}
         </ul>
       </section>
-      <section className="rounded-xl border border-ink-200 bg-white/80 p-6">
-        <h2 className="text-lg font-semibold text-ink-900">Status</h2>
-        <p className="mt-2 text-sm text-ink-600">
-          Will status: <strong>{will.status}</strong>. Executor:{" "}
-          {will.executor_wallet.slice(0, 10)}…{will.executor_wallet.slice(-8)}
-        </p>
-        <p className="mt-4 text-xs text-ink-500">
-          (MVP: placeholder values; real integration would read chain balances.)
+
+      {/* ── Status ─────────────────────────────────────────── */}
+      <section className="card">
+        <h2 className="font-serif text-lg font-semibold text-ink-900">
+          Status
+        </h2>
+        <p className="mt-3 text-sm text-ink-500">
+          Will status:{" "}
+          <strong className="text-ink-800">{will.status}</strong>.
+          Executor: {will.executor_wallet.slice(0, 10)}…
+          {will.executor_wallet.slice(-8)}
         </p>
       </section>
     </div>
