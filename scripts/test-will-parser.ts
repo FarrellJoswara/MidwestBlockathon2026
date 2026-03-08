@@ -175,6 +175,54 @@ async function testFullPipeline(cid: string) {
   }
 }
 
+// ── Test 3b: Local PDF → Gemini (needs API key, no IPFS) ────────────────────
+
+async function testLocalPdfPipeline() {
+  console.log("\n═══ Test 3b: Local PDF → Gemini Pipeline ═══");
+
+  if (!process.env.GEMINI_API_KEY) {
+    console.log("  ⏭️  Skipped — GEMINI_API_KEY not set in .env.local");
+    return;
+  }
+
+  try {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+
+    const pdfPath = resolve(__dirname, "test_will.pdf");
+    const pdfBuffer = readFileSync(pdfPath);
+    assert(pdfBuffer.length > 0, `Read ${pdfBuffer.length} bytes from test_will.pdf`);
+
+    const { parseWillFromBuffer } = await import(
+      "../lib/modules/contract-parser/pipeline/parseWillFromCID"
+    );
+
+    const result = await parseWillFromBuffer(pdfBuffer);
+
+    assert(Array.isArray(result.beneficiaries), "beneficiaries is an array");
+    assert(result.beneficiaries.length > 0, `Found ${result.beneficiaries.length} beneficiaries`);
+    assert(!!result.testator_name, `Testator: ${result.testator_name}`);
+    assert(!!result.executor_name, `Executor: ${result.executor_name}`);
+
+    // Verify placeholders were generated
+    for (const b of result.beneficiaries) {
+      assert(
+        !!b.placeholderId && b.placeholderId.length > 0,
+        `Beneficiary "${b.name}" has placeholderId "${b.placeholderId}"`
+      );
+      console.log(
+        `  ℹ️  ${b.name} → ${b.assetType} — ${b.assetDescription}`
+      );
+    }
+
+    console.log("\n  📋 Full parsed output:");
+    console.log(JSON.stringify(result, null, 2));
+  } catch (err) {
+    console.log(`  ❌ Local PDF pipeline failed: ${(err as Error).message}`);
+    failed++;
+  }
+}
+
 // ── Runner ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -184,17 +232,20 @@ async function main() {
 
   const cid = process.argv[2]; // optional CID from command line
 
-  // Always run
+  // Always run offline tests
   testTypedSchema();
   await testPdfExtraction();
 
-  // Run only if a CID was provided
+  // Local PDF → Gemini test (always runs if GEMINI_API_KEY is set)
+  await testLocalPdfPipeline();
+
+  // IPFS tests only if a CID was provided
   if (cid) {
     await testIpfsFetch(cid);
     await testFullPipeline(cid);
   } else {
-    console.log("\n═══ Tests 3 & 4: Skipped ═══");
-    console.log("  ⏭️  No CID provided. To run IPFS + Gemini tests:");
+    console.log("\n═══ IPFS Tests: Skipped ═══");
+    console.log("  ⏭️  No CID provided. To also run IPFS tests:");
     console.log("     npx tsx scripts/test-will-parser.ts QmYOUR_CID_HERE");
   }
 

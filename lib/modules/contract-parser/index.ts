@@ -18,7 +18,7 @@ export { fetchPdfFromIPFS } from "./services/ipfsFetcher";
 export { parseWillWithGemini } from "./services/willParser";
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
-export { parseWillFromCID } from "./pipeline/parseWillFromCID";
+export { parseWillFromCID, parseWillFromBuffer } from "./pipeline/parseWillFromCID";
 
 // ── Legacy stub (kept for backward compat) ────────────────────────────────────
 
