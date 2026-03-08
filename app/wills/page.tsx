@@ -63,12 +63,14 @@ export default function WillsListPage() {
           <Link href="/" className="font-semibold text-ink-900">
             ◆ dihhapp
           </Link>
-          <Link href="/wills/create" className="rounded-lg bg-ink-900 px-4 py-2 text-sm text-white hover:bg-ink-800">
-            Create Will
-          </Link>
-          <Link href="/deploy" className="rounded-lg border border-ink-300 bg-parchment px-4 py-2 text-sm text-ink-800 hover:bg-ink-100">
-            Deploy contract
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/wills/create" className="rounded-lg bg-ink-900 px-4 py-2 text-sm text-white hover:bg-ink-800">
+              Create Will
+            </Link>
+            <Link href="/deploy" className="rounded-lg border border-ink-300 bg-parchment px-4 py-2 text-sm text-ink-800 hover:bg-ink-100">
+              Deploy contract
+            </Link>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-10">
