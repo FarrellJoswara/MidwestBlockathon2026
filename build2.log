@@ -57,7 +57,7 @@ Import trace for requested module:
     at async exportAppRoute (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\next\dist\export\routes\app-route.js:77:26) {
   status: 404
 }
-[test-gemini] i [AppError]: Gemini API rate limit reached.
+[test-gemini] n [AppError]: Gemini API rate limit reached.
 Please wait before retrying.
     at C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\.next\server\app\api\test-gemini\route.js:1:5605
     at l (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\.next\server\app\api\test-gemini\route.js:1:6059)

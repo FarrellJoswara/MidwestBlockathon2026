@@ -1,0 +1,64 @@
+[dotenv@17.3.1] injecting env (10) from .env.local -- tip: ΓÜÖ∩╕Å  write to custom object with { processEnv: myObject }
+ΓòöΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòù
+Γòæ     Will Parser ΓÇö Integration Tests      Γòæ
+ΓòÜΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓò¥
+
+ΓòÉΓòÉΓòÉ Test 1: Type Validation (offline) ΓòÉΓòÉΓòÉ
+  Γ£à testator_name is set
+  Γ£à testator placeholder is snake_case name
+  Γ£à 2 beneficiaries
+  Γ£à first beneficiary assetType = CASH
+  Γ£à first beneficiary has placeholderId
+  Γ£à second beneficiary assetType = PROPERTY
+  Γ£à 1 condition
+  Γ£à JSON round-trip preserves data
+
+ΓòÉΓòÉΓòÉ Test 2: PDF Text Extraction (pdf-parse) ΓòÉΓòÉΓòÉ
+  Γ£à getText() returns a string
+  Γä╣∩╕Å  Extracted text length: 16 chars
+  Γ£à pdf-parse loaded and working correctly
+
+ΓòÉΓòÉΓòÉ Test 3b: Local PDF ΓåÆ Gemini Pipeline ΓòÉΓòÉΓòÉ
+  Γ£à Read 4482 bytes from test_will.pdf
+[pipeline] Parsing will from local buffer...
+[willParser] Extracted 2596 characters from PDF.
+[willParser] Sending will text to Gemini for analysis...
+[gemini] Model gemini-3.1-flash-lite hit rate limit. Falling back to gemini-2.5-flash...
+[gemini] Model gemini-2.5-flash hit rate limit. Falling back to gemini-2.0-flash...
+[gemini] Model gemini-2.0-flash hit rate limit. Falling back to gemini-1.5-flash-latest...
+[gemini] Gemini API request failed for model gemini-1.5-flash-latest: ApiError: {"error":{"code":404,"message":"models/gemini-1.5-flash-latest is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.","status":"NOT_FOUND"}}
+    at throwErrorIfNotOK (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\@google\genai\dist\node\index.cjs:12706:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\@google\genai\dist\node\index.cjs:12409:13
+    at async Models.generateContent (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\@google\genai\dist\node\index.cjs:13810:24)
+    at async callGemini (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\gemini.ts:142:22)
+    at async parseWillWithGemini (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\modules\contract-parser\services\willParser.ts:233:20)
+    at async parseWillFromBuffer (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\modules\contract-parser\pipeline\parseWillFromCID.ts:73:22)
+    at async testLocalPdfPipeline (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\scripts\test-will-parser.ts:200:20)
+    at async main (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\scripts\test-will-parser.ts:240:3) {
+  status: 404
+}
+[willParser] Gemini request failed: AppError: Gemini API rate limit reached.
+Please wait before retrying.
+    at classifyGeminiError (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\gemini.ts:79:12)
+    at callGemini (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\gemini.ts:156:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async parseWillWithGemini (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\modules\contract-parser\services\willParser.ts:233:20)
+    at async parseWillFromBuffer (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\lib\modules\contract-parser\pipeline\parseWillFromCID.ts:73:22)
+    at async testLocalPdfPipeline (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\scripts\test-will-parser.ts:200:20)
+    at async main (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\scripts\test-will-parser.ts:240:3) {
+  code: 'GEMINI_RATE_LIMIT',
+  status: 429,
+  expose: true
+}
+  Γ¥î Local PDF pipeline failed: Gemini API rate limit reached.
+Please wait before retrying.
+
+ΓòÉΓòÉΓòÉ IPFS Tests: Skipped ΓòÉΓòÉΓòÉ
+  ΓÅ¡∩╕Å  No CID provided. To also run IPFS tests:
+     npx tsx scripts/test-will-parser.ts QmYOUR_CID_HERE
+
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  Results: 11 passed, 1 failed
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+

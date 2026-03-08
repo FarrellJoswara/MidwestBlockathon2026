@@ -4,6 +4,8 @@ import { handleApiError, errorResponse } from "@/lib/api-helpers";
 import { ErrorCodes } from "@/lib/errors";
 import { getGeminiApiKey } from "@/lib/env";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/test-gemini — runs testGemini() to verify Gemini API key and model.
  */

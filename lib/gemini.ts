@@ -109,13 +109,22 @@ export function classifyGeminiError(err: unknown): AppError {
 
 // ── Request Wrapper ──────────────────────────────────────────────────────────
 
+const FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash-latest"
+];
+
 /**
  * Call the Gemini API and return the text response.
  *
  * Handles all error classification internally. Callers receive either
  * a clean text response or a classified AppError.
+ * 
+ * If the primary model hits a rate limit, it will automatically fallback
+ * to a list of alternative models.
  *
- * @param model    - Gemini model name (e.g. "gemini-2.5-flash-lite").
+ * @param model    - Primary Gemini model name (e.g. "gemini-3.1-flash-lite").
  * @param contents - Prompt string or structured content.
  * @returns The text response from the model.
  * @throws {AppError} with classified error code on any failure.
@@ -125,25 +134,41 @@ export async function callGemini(
   contents: string,
 ): Promise<string> {
   const ai = getGeminiClient();
+  const modelsToTry = [model, ...FALLBACK_MODELS.filter((m) => m !== model)];
 
-  let result;
-  try {
-    result = await ai.models.generateContent({ model, contents });
-  } catch (err) {
-    console.error("[gemini] Gemini API request failed:", err);
-    throw classifyGeminiError(err);
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const currentModel = modelsToTry[i];
+    try {
+      const result = await ai.models.generateContent({ model: currentModel, contents });
+      const text = result.text?.trim() ?? "";
+
+      if (!text) {
+        throw new AppError(
+          "Gemini API returned an unexpected response format.\n" +
+            "This may indicate an upstream API change.",
+          ErrorCodes.GEMINI_RESPONSE_INVALID,
+          502,
+        );
+      }
+
+      return text;
+    } catch (err) {
+      const classifiedError = classifyGeminiError(err);
+      
+      // If we hit a rate limit and there are more models to try, try the next
+      if (classifiedError.code === ErrorCodes.GEMINI_RATE_LIMIT && i < modelsToTry.length - 1) {
+        console.warn(`[gemini] Model ${currentModel} hit rate limit. Falling back to ${modelsToTry[i + 1]}...`);
+        continue;
+      }
+
+      console.error(`[gemini] Gemini API request failed for model ${currentModel}:`, err);
+      throw classifiedError;
+    }
   }
 
-  const text = result.text?.trim() ?? "";
-
-  if (!text) {
-    throw new AppError(
-      "Gemini API returned an unexpected response format.\n" +
-        "This may indicate an upstream API change.",
-      ErrorCodes.GEMINI_RESPONSE_INVALID,
-      502,
-    );
-  }
-
-  return text;
+  throw new AppError(
+    "All Gemini models exhausted due to rate limits.",
+    ErrorCodes.GEMINI_RATE_LIMIT,
+    429,
+  );
 }

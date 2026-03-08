@@ -1,0 +1,61 @@
+
+> dihhapp@0.1.0 build
+> next build
+
+  Γû▓ Next.js 14.2.19
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ΓÜá Compiled with warnings
+
+./node_modules/@metamask/sdk/dist/browser/es/metamask-sdk.js
+Module not found: Can't resolve '@react-native-async-storage/async-storage' in 'C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\@metamask\sdk\dist\browser\es'
+
+Import trace for requested module:
+./node_modules/@metamask/sdk/dist/browser/es/metamask-sdk.js
+./node_modules/@wagmi/connectors/dist/esm/metaMask.js
+./node_modules/@wagmi/connectors/dist/esm/exports/index.js
+./node_modules/wagmi/dist/esm/exports/connectors.js
+./node_modules/@privy-io/wagmi/dist/esm/index.mjs
+./app/providers.tsx
+./app/ClientProviders.tsx
+
+ ΓÜá Compiled with warnings
+
+./node_modules/@metamask/sdk/dist/browser/es/metamask-sdk.js
+Module not found: Can't resolve '@react-native-async-storage/async-storage' in 'C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\@metamask\sdk\dist\browser\es'
+
+Import trace for requested module:
+./node_modules/@metamask/sdk/dist/browser/es/metamask-sdk.js
+./node_modules/@wagmi/connectors/dist/esm/metaMask.js
+./node_modules/@wagmi/connectors/dist/esm/exports/index.js
+./node_modules/wagmi/dist/esm/exports/connectors.js
+./node_modules/@privy-io/wagmi/dist/esm/index.mjs
+./app/providers.tsx
+./app/ClientProviders.tsx
+
+ Γ£ô Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\.next\server\app\api\contract\generate-and-deploy\route.js:5
+```json
+   ^^^^
+
+SyntaxError: Unexpected identifier 'json'
+    at wrapSafe (node:internal/modules/cjs/loader:1691:18)
+    at Module._compile (node:internal/modules/cjs/loader:1734:20)
+    at Object..js (node:internal/modules/cjs/loader:1892:10)
+    at Module.load (node:internal/modules/cjs/loader:1480:32)
+    at Module._load (node:internal/modules/cjs/loader:1299:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.<anonymous> (node:internal/modules/cjs/loader:1503:12)
+    at mod.require (C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\next\dist\server\require-hook.js:65:28)
+    at require (node:internal/modules/helpers:152:16)
+
+> Build error occurred
+Error: Failed to collect page data for /api/contract/generate-and-deploy
+    at C:\Users\obijr\Downloads\code\projects\web3\MidwestBlockathon2026\node_modules\next\dist\build\utils.js:1268:15
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  type: 'Error'
+}

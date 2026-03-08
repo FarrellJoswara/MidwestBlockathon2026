@@ -14,7 +14,7 @@ import { callGemini } from "@/lib/gemini";
 import { AppError, ErrorCodes } from "@/lib/errors";
 import type { ParserOutput, GeneratedContract } from "../types";
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 /**
  * Test: call Gemini with a simple prompt (for verification only).
@@ -34,9 +34,9 @@ export async function generateContractFromParserData(
   const prompt = `You are a Solidity contract generator. Use the following JSON data to generate a valid Solidity smart contract for a will/estate system.
 
   Data (JSON):
-\`\`\`json
+---JSON---
 ${JSON.stringify(parserOutput, null, 2)}
-\`\`\`
+---END JSON---
 
 Requirements:
 - Generate a complete, valid Solidity contract that uses this data.
@@ -46,7 +46,7 @@ ${buildDeclareDeathRequirements()}
 - Return ONLY the Solidity source code.
 - No markdown.
 - No explanation.
-- No \`\`\`solidity wrapper.
+- No markdown code blocks.
 - Just the raw .sol file contents.`;
 
   let raw: string;

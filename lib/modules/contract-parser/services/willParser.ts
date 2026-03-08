@@ -19,7 +19,7 @@ import type { ParsedWill, Beneficiary, AssetType } from "../types/will";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const GEMINI_MODEL = "gemini-2.5-flash-lite";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
