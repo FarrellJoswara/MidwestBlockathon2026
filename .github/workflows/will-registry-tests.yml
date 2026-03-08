@@ -1,0 +1,32 @@
+# WillRegistry tests: contract, chain module, simulate, read-only.
+# All scripts skip when required env is missing (exit 0), so this job passes without secrets.
+# Set DEPLOYER_PRIVATE_KEY and NEXT_PUBLIC_WILL_REGISTRY_ADDRESS in repo secrets for full run.
+name: WillRegistry tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  will-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run WillRegistry tests
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          NEXT_PUBLIC_WILL_REGISTRY_ADDRESS: ${{ secrets.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS }}
+          WILL_REGISTRY_RPC_URL: ${{ secrets.WILL_REGISTRY_RPC_URL }}
+        run: npm run test:will-registry:all

@@ -33,7 +33,8 @@ export async function compileContract(
       [VIRTUAL_SOURCE_PATH]: { content: source },
     },
     settings: {
-      optimizer: { enabled: false },
+      optimizer: { enabled: true, runs: 200 },
+      viaIR: true,
       outputSelection: {
         "*": {
           "*": ["abi", "evm.bytecode"],

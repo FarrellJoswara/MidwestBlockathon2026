@@ -65,8 +65,8 @@ export async function PATCH(
   }
   const { id } = await params;
   const result = await getWillWithRole(id, wallet);
-  if (!result || result.role !== "executor") {
-    return NextResponse.json({ error: "Will not found or only executor can update" }, { status: 403 });
+  if (!result || (result.role !== "creator" && result.role !== "executor")) {
+    return NextResponse.json({ error: "Will not found or only creator/executor can update" }, { status: 403 });
   }
   if (result.will.status !== "active") {
     return NextResponse.json(

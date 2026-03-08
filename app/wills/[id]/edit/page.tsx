@@ -7,8 +7,9 @@ import { useAccount, useWriteContract } from "wagmi";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/modules/api";
 import { willRegistryAbi } from "@/lib/modules/contract-generator/abi";
+import { xrplEvmTestnet } from "@/lib/modules/chain/chains";
 import type { Will, WillPool } from "@/lib/modules/types";
-import { type Address } from "viem";
+import { type Address, getAddress } from "viem";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
 
@@ -70,24 +71,36 @@ export default function EditWillPage() {
     setSaving(true);
     setError(null);
     try {
-      const poolNames = pools.map((p) => p.name);
-      const poolWallets = pools.map((p) =>
-        p.beneficiary_wallets.map((w) => w.trim() as Address)
-      );
-      const poolPercentages = pools.map((p) => p.beneficiary_percentages.map((n) => BigInt(n)));
+      const beneficiaryWallets: Address[] = [];
+      for (const p of pools) {
+        for (const w of p.beneficiary_wallets) {
+          try {
+            beneficiaryWallets.push(getAddress(w.trim()));
+          } catch {
+            setError(
+              "Invalid wallet address. Each address must be 0x followed by 40 hex characters (e.g. 0x1234...abcd)."
+            );
+            setSaving(false);
+            return;
+          }
+        }
+      }
+      if (beneficiaryWallets.length === 0) {
+        setError("At least one beneficiary wallet is required.");
+        setSaving(false);
+        return;
+      }
       await writeContractAsync({
         address: CONTRACT_ADDRESS,
         abi: willRegistryAbi,
         functionName: "updateWill",
         args: [
           BigInt(id),
-          poolNames,
-          poolWallets,
-          poolPercentages,
+          beneficiaryWallets,
           data.will.ipfs_cid ?? "",
           data.will.encrypted_doc_key_iv ?? "",
-          0,
         ],
+        chainId: xrplEvmTestnet.id,
         gas: BigInt(300000),
       });
       queryClient.invalidateQueries({ queryKey: ["will", id, address] });
@@ -118,10 +131,10 @@ export default function EditWillPage() {
     );
   }
 
-  if (data.role !== "executor" || data.will.status !== "active") {
+  if ((data.role !== "creator" && data.role !== "executor") || data.will.status !== "active") {
     return (
       <div className="min-h-screen bg-parchment px-6 py-24 text-center">
-        <p className="text-ink-500">Only the executor can edit an active will.</p>
+        <p className="text-ink-500">Only the creator or executor can edit an active will. (Only the creator can save changes on-chain.)</p>
         <Link href={`/wills/${id}`} className="btn-outlined mt-6 inline-flex">
           ← Back to will
         </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAccount, useWriteContract, useDeployContract, usePublicClient, useChainId, useSwitchChain, useWalletClient } from "wagmi";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -11,44 +11,56 @@ import { generateContractFromParserDataClient } from "@/lib/modules/contract-gen
 import { compileContractClient } from "@/lib/modules/contract-generator/client-compile";
 import type { ParserOutput } from "@/lib/modules/contract-generator/types";
 import type { ParsedWill } from "@/lib/modules/contract-parser/types/will";
-import { type Address, decodeErrorResult } from "viem";
+import { type Address, decodeErrorResult, getAddress } from "viem";
+import { createPublicClient, http } from "viem";
 
 const CONTRACT_ADDRESS = process.env
   .NEXT_PUBLIC_WILL_REGISTRY_ADDRESS as Address;
+// Backup registry (backupscript.sol) uses the same createWill(executor, beneficiaries, ipfsCid, encryptedDocKeyIv, generatedContractAddress).
+// Empty strings for ipfsCid/encryptedDocKeyIv are fine. Run npm run deploy:backup to deploy backup and set this env.
 
 /** Standard Solidity Error(string) for require(msg) reverts */
 const ERROR_STRING_ABI = [
   { type: "error" as const, name: "Error", inputs: [{ name: "message", type: "string" }] },
 ] as const;
 
-/** Extract contract revert reason from viem/wagmi errors for display. */
+/** Extract contract revert reason from viem/wagmi/Privy errors for display. */
 function getRevertReason(err: unknown): string | null {
   if (!err || typeof err !== "object") return null;
   const e = err as Record<string, unknown>;
+  // Direct reason/shortMessage (viem)
   if (e.reason && typeof e.reason === "string") return e.reason;
   if (e.shortMessage && typeof e.shortMessage === "string") {
-    const sm = (e.shortMessage as string);
+    const sm = e.shortMessage as string;
     if (!sm.toLowerCase().includes("unknown reason")) return sm;
   }
-  if (e.message && typeof e.message === "string") return e.message;
-  const cause = e.cause as unknown;
-  if (cause && typeof cause === "object" && "reason" in cause && typeof (cause as { reason: unknown }).reason === "string") {
-    return (cause as { reason: string }).reason;
+  // Nested error (e.g. Privy/wallet wraps in .error)
+  const inner = e.error as Record<string, unknown> | undefined;
+  if (inner && typeof inner === "object") {
+    const innerMsg = (inner.message ?? inner.shortMessage ?? inner.reason) as string | undefined;
+    if (typeof innerMsg === "string" && innerMsg.length > 0) return innerMsg;
   }
-  if (cause && typeof cause === "object" && "shortMessage" in cause && typeof (cause as { shortMessage: unknown }).shortMessage === "string") {
-    return (cause as { shortMessage: string }).shortMessage;
+  if (e.message && typeof e.message === "string" && e.message !== "Transaction failed") return e.message;
+  const cause = e.cause as unknown;
+  if (cause && typeof cause === "object") {
+    const c = cause as Record<string, unknown>;
+    if (typeof c.reason === "string") return c.reason;
+    if (typeof c.shortMessage === "string") return c.shortMessage;
+    if (typeof c.message === "string") return c.message;
   }
   // Try to decode raw revert data (Error(string) from require)
   let needle: unknown = err;
   while (needle && typeof needle === "object") {
     const o = needle as Record<string, unknown>;
-    const data = o.data ?? o.raw;
+    const data = o.data ?? o.raw ?? (o as { cause?: { data?: unknown } }).cause?.data ?? (e.transaction as { data?: unknown })?.data;
     if (data && typeof data === "string" && data.startsWith("0x")) {
       try {
         const decoded = decodeErrorResult({ data: data as `0x${string}`, abi: ERROR_STRING_ABI });
         if (decoded.errorName === "Error" && decoded.args?.[0] && typeof decoded.args[0] === "string") return decoded.args[0];
       } catch {
-        // not Error(string), skip
+        if (typeof (o.shortMessage ?? o.message) === "string" && String(o.shortMessage ?? o.message).toLowerCase().includes("unknown reason")) {
+          console.warn("[CreateWill] Revert data (unable to decode as Error(string)):", data.slice(0, 66) + (data.length > 66 ? "..." : ""));
+        }
       }
     }
     needle = (needle as { cause?: unknown }).cause;
@@ -69,6 +81,7 @@ export default function CreateWillPage() {
   const { writeContractAsync } = useWriteContract();
   const { deployContractAsync } = useDeployContract();
   const publicClient = usePublicClient();
+  const publicClientXrplTestnet = usePublicClient({ chainId: xrplEvmTestnet.id });
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const { data: walletClient } = useWalletClient();
@@ -88,6 +101,11 @@ export default function CreateWillPage() {
     deploymentTxHash?: string;
     contractAddress?: string;
     explorerUrl: string;
+  } | null>(null);
+  /** Hold last createWill args so we can simulate in catch to get revert reason */
+  const lastCreateWillArgsRef = useRef<{
+    args: readonly [Address, readonly Address[], string, string, Address];
+    receiptClient: ReturnType<typeof createPublicClient>;
   } | null>(null);
 
   const totalPct = percentages.reduce((s, p) => s + p, 0);
@@ -349,7 +367,14 @@ export default function CreateWillPage() {
       if (!publicClient) {
         throw new Error("Cannot wait for receipt: public client not available.");
       }
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHashDeploy });
+      // Ensure receipt is from XRPL Testnet so contractAddress is correct for createWill
+      const receiptClient =
+        publicClientXrplTestnet ??
+        createPublicClient({
+          chain: xrplEvmTestnet,
+          transport: http(xrplEvmTestnet.rpcUrls.default.http[0]),
+        });
+      const receipt = await receiptClient.waitForTransactionReceipt({ hash: txHashDeploy });
       const contractAddress = receipt.contractAddress;
       if (!contractAddress) {
         throw new Error("Deployment receipt did not contain a contract address.");
@@ -409,93 +434,51 @@ export default function CreateWillPage() {
 
       if (CONTRACT_ADDRESS) {
         console.log("[CreateWill] Step 6: Calling WillRegistry.createWill...");
-        // Mirror contract requires: avoid "unknown reason" by validating here and normalizing percentages.
-        if (!address || address === "0x0000000000000000000000000000000000000000") {
-          setError("Creator wallet is required.");
+        // msg.sender becomes creator; we pass executor (same wallet), flat beneficiaries, IPFS, generated contract.
+        const executorWallet = address ? getAddress(address) : undefined;
+        if (!executorWallet || executorWallet === "0x0000000000000000000000000000000000000000") {
+          setError("Executor wallet is required.");
           setLoading(false);
           return;
         }
         if (wallets.length === 0) {
-          setError("At least one beneficiary wallet is required (pool empty).");
+          setError("At least one beneficiary wallet is required.");
           setLoading(false);
           return;
         }
-        const pctInts = pcts.map((p) => Math.max(0, Math.round(Number(p))));
-        if (pctInts.length !== wallets.length) {
-          setError("Beneficiary and percentage count must match.");
-          setLoading(false);
-          return;
-        }
-        let sum = pctInts.reduce((s, n) => s + n, 0);
-        if (sum !== 100 && pctInts.length > 0) {
-          const diff = 100 - sum;
-          if (diff > 0) {
-            pctInts[0] = pctInts[0] + diff;
-          } else {
-            // sum > 100: reduce first entry (keep non-negative)
-            let d = -diff;
-            for (let i = 0; i < pctInts.length && d > 0; i++) {
-              const take = Math.min(pctInts[i], d);
-              pctInts[i] -= take;
-              d -= take;
-            }
-          }
-        }
-        sum = pctInts.reduce((s, n) => s + n, 0);
-        if (sum !== 100) {
-          setError("Percentages must total exactly 100% (got " + sum + " after rounding). Adjust the shares and try again.");
-          setLoading(false);
-          return;
-        }
-        const poolPctBigInt = pctInts.map((p) => {
-          if (p < 0 || p > 100) {
-            throw new Error("Invalid percentage: " + p);
-          }
-          return BigInt(p);
-        });
+        const beneficiaryAddresses = wallets.map((w) => getAddress(w.trim()));
         const createWillArgs = [
-          address,
-          ["Allocation"],
-          [wallets.map((w) => w.trim() as Address)],
-          [poolPctBigInt],
+          executorWallet,
+          beneficiaryAddresses,
           cidStr,
           ivStr,
+          contractAddress,
         ] as const;
-        // Simulate first to surface revert (RPC may not return reason string)
-        if (publicClient && address) {
-          try {
-            await publicClient.simulateContract({
-              account: address,
-              address: CONTRACT_ADDRESS,
-              abi: willRegistryAbi,
-              functionName: "createWill",
-              args: createWillArgs,
-            });
-          } catch (simErr) {
-            const reason = getRevertReason(simErr);
-            console.error("[CreateWill] Simulation failed:", reason || simErr, simErr);
-            // Log raw revert data if present (helps debug when RPC doesn't decode)
-            const errObj = simErr as Record<string, unknown>;
-            if (errObj?.cause && typeof errObj.cause === "object" && errObj.cause !== null && "data" in errObj.cause) {
-              console.error("[CreateWill] Revert data:", (errObj.cause as { data?: unknown }).data);
-            }
-            if (reason && !reason.toLowerCase().includes("unknown")) {
-              setError("Contract would revert: " + reason);
-            } else {
-              setError(
-                "Transaction would revert on chain. Check: (1) Percentages total exactly 100%, (2) At least one beneficiary, (3) All addresses are valid 0x40-char hex."
-              );
-            }
-            setLoading(false);
-            return;
+        // Gas: estimate first; use estimate*1.2 or cap 500k, fallback 300k on estimate failure
+        let gasLimit = BigInt(300000);
+        try {
+          const estimated = await receiptClient.estimateContractGas({
+            address: CONTRACT_ADDRESS,
+            abi: willRegistryAbi,
+            functionName: "createWill",
+            args: createWillArgs,
+            account: address!,
+          });
+          if (estimated > BigInt(300000)) {
+            gasLimit = estimated * BigInt(120) / BigInt(100);
+            if (gasLimit > BigInt(500000)) gasLimit = BigInt(500000);
           }
+        } catch {
+          // Revert or estimate failure: keep default 300000
         }
+        lastCreateWillArgsRef.current = { args: createWillArgs, receiptClient };
         const registryTxHash = await writeContractAsync({
           address: CONTRACT_ADDRESS,
           abi: willRegistryAbi,
           functionName: "createWill",
           args: createWillArgs,
-          gas: BigInt(300000),
+          chainId: xrplTestnetId,
+          gas: gasLimit,
         });
         console.log("[CreateWill] Step 7: Will created on registry", { registryTxHash });
         setSuccessResult({
@@ -517,13 +500,35 @@ export default function CreateWillPage() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const reason = getRevertReason(err);
+      let reason = getRevertReason(err);
+      // Log full structure for debugging (wallet may attach .transaction / .error)
+      try {
+        const er = err as Record<string, unknown>;
+        if (er.transaction !== undefined) console.error("[CreateWill] Error.transaction:", er.transaction);
+        if (er.error !== undefined) console.error("[CreateWill] Error.error:", er.error);
+      } catch (_) {}
       console.error("[CreateWill] Error:", msg, reason ?? "", err);
+      // If no reason yet and we have last args, simulate to get revert reason
+      if (!reason && lastCreateWillArgsRef.current && CONTRACT_ADDRESS && address) {
+        try {
+          await lastCreateWillArgsRef.current.receiptClient.simulateContract({
+            address: CONTRACT_ADDRESS,
+            abi: willRegistryAbi,
+            functionName: "createWill",
+            args: lastCreateWillArgsRef.current.args,
+            account: address,
+          });
+        } catch (simErr: unknown) {
+          reason = getRevertReason(simErr) ?? (simErr instanceof Error ? simErr.message : String(simErr));
+          console.error("[CreateWill] Simulated createWill (revert reason):", reason);
+        }
+        lastCreateWillArgsRef.current = null;
+      }
       if (reason) {
         setError(`Transaction failed: ${reason}`);
       } else if (msg.includes("Transaction failed") || msg.includes("revert") || msg.includes("execution reverted")) {
         setError(
-          "Transaction was rejected by the chain. Ensure beneficiary percentages total exactly 100% and addresses are valid, then try again."
+          "Transaction failed. If you rejected it in your wallet, try again and confirm. Otherwise the contract may have reverted — check the browser console (F12) for details."
         );
       } else {
         setError(msg || "Failed to create will");

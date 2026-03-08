@@ -31,6 +31,7 @@ export default function WillsListPage() {
         WillWithRole[]
       >,
     enabled: !!address,
+    refetchInterval: 3_000, // Poll WillRegistry every 3s
   });
 
   if (!isConnected || !address) {

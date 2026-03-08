@@ -25,59 +25,52 @@ function timestampToIso(seconds: bigint): string {
 async function fetchWillById(willId: bigint): Promise<Will | null> {
   if (!contractAddress) return null;
   try {
-    const [meta, poolCount] = await Promise.all([
-      publicClient.readContract({
-        address: contractAddress,
-        abi: willRegistryAbi,
-        functionName: "getWill",
-        args: [willId],
-      }),
-      publicClient.readContract({
-        address: contractAddress,
-        abi: willRegistryAbi,
-        functionName: "getWillPoolCount",
-        args: [willId],
-      }),
-    ]);
+    const meta = await publicClient.readContract({
+      address: contractAddress,
+      abi: willRegistryAbi,
+      functionName: "getWill",
+      args: [willId],
+    });
     const [
       id,
-      creatorWallet,
-      executorWallet,
+      creator,
+      executor,
+      beneficiaries,
       ipfsCid,
       encryptedDocKeyIv,
+      generatedContractAddress,
       status,
       createdAt,
       updatedAt,
     ] = meta;
-    const pools: WillPool[] = [];
-    for (let p = 0; p < Number(poolCount); p++) {
-      const [name, beneficiaryWallets, beneficiaryPercentages] =
-        await publicClient.readContract({
-          address: contractAddress,
-          abi: willRegistryAbi,
-          functionName: "getPool",
-          args: [willId, BigInt(p)],
-        });
-      pools.push({
-        name: name as string,
-        beneficiary_wallets: (beneficiaryWallets as Address[]).map((a) =>
-          a.toLowerCase()
-        ),
-        beneficiary_percentages: (beneficiaryPercentages as bigint[]).map((n) =>
-          Number(n)
-        ),
-      });
-    }
-    const first = pools[0];
+
+    const beneficiary_wallets = (beneficiaries as Address[]).map((a) =>
+      a.toLowerCase()
+    );
+    // Registry no longer stores percentages; use a single synthetic pool for UI compat.
+    const pools: WillPool[] = beneficiary_wallets.length
+      ? [
+          {
+            name: "Estate",
+            beneficiary_wallets,
+            beneficiary_percentages: [],
+          },
+        ]
+      : [];
+    const beneficiary_percentages: number[] = [];
+
     return {
       id: String(id),
-      creator_wallet: (creatorWallet as Address).toLowerCase(),
-      executor_wallet: (executorWallet as Address).toLowerCase(),
+      creator_wallet: (creator as Address).toLowerCase(),
+      executor_wallet: (executor as Address).toLowerCase(),
       pools,
-      beneficiary_wallets: first?.beneficiary_wallets ?? [],
-      beneficiary_percentages: first?.beneficiary_percentages ?? [],
+      beneficiary_wallets,
+      beneficiary_percentages,
       ipfs_cid: (ipfsCid as string) || null,
       encrypted_doc_key_iv: (encryptedDocKeyIv as string) || null,
+      generated_contract_address: generatedContractAddress
+        ? (generatedContractAddress as Address).toLowerCase()
+        : null,
       status: contractStatusToApp(Number(status)),
       created_at: timestampToIso(createdAt as bigint),
       updated_at: timestampToIso(updatedAt as bigint),
@@ -153,7 +146,7 @@ export async function createWill(_row: {
   encrypted_doc_key_iv?: string | null;
 }): Promise<Will> {
   throw new Error(
-    "Create will on-chain from the frontend (use contract createWill). Set NEXT_PUBLIC_WILL_REGISTRY_ADDRESS and call the contract with the executor wallet."
+    "Create will on-chain from the frontend (use contract createWill). Set NEXT_PUBLIC_WILL_REGISTRY_ADDRESS and call the contract with the creator wallet (msg.sender)."
   );
 }
 

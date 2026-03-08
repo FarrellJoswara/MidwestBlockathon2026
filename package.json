@@ -8,7 +8,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "deploy-sol": "tsx scripts/deploy-sol.ts"
+    "deploy-sol": "tsx scripts/deploy-sol.ts",
+    "deploy:backup": "tsx scripts/deploy-backup-registry.ts",
+    "test:will-registry:contract": "tsx tests/will-registry/contract.test.ts",
+    "test:will-registry:chain": "tsx tests/will-registry/chain.test.ts",
+    "test:will-registry:simulate": "tsx scripts/simulate-create-will.ts",
+    "test:will-registry:read": "tsx scripts/test-will-registry.ts",
+    "test:will-registry:all": "npm run test:will-registry:contract && npm run test:will-registry:chain && npm run test:will-registry:simulate && npm run test:will-registry:read"
   },
   "dependencies": {
     "@google/genai": "^1.44.0",
