@@ -27,7 +27,7 @@ const ai = new GoogleGenAI({
 export async function testGemini(): Promise<string> {
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
-    contents: "",
+    contents: "poop",
   });
   return response.text ?? "";
 }
